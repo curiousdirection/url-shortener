@@ -20,9 +20,10 @@ npm run dev
 
 ## Test
 
-Tests use a separate database (`urlshortener_test`) and Redis DB 1, configured in `.env.test`, because they truncate tables. `docker compose` creates the test database on first start. Vitest refuses to run if the database name doesn't end in `_test`.
+Tests use a separate Postgres (`postgres-test`, port 5433, RAM-backed so it is wiped on restart) and Redis DB 1, configured in `.env.test`, because they truncate tables. Vitest refuses to run if the database name doesn't end in `_test`.
 
 ```bash
+docker compose up -d
 npm run migrate:test
 npm test
 ```
