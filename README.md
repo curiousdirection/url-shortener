@@ -20,8 +20,9 @@ npm run dev
 
 ## Test
 
-Requires Postgres and Redis running (see `.env.example`), and `npm run migrate` applied. Tests do not run migrations.
+Tests use a separate database (`urlshortener_test`) and Redis DB 1, configured in `.env.test`, because they truncate tables. `docker compose` creates the test database on first start. Vitest refuses to run if the database name doesn't end in `_test`.
 
 ```bash
+npm run migrate:test
 npm test
 ```
