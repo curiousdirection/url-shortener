@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config } from "../src/config.js";
@@ -32,6 +33,7 @@ describe("runMigrations", () => {
     expect(results.map((r) => r.status)).toEqual(Array(4).fill("fulfilled"));
 
     const { rows } = await pool.query("SELECT name FROM schema_migrations ORDER BY name");
-    expect(rows.map((r) => r.name)).toEqual(["001_create_urls.sql", "002_create_url_code_seq.sql"]);
+    const files = readdirSync(new URL("../migrations", import.meta.url)).filter((f) => f.endsWith(".sql")).sort();
+    expect(rows.map((r) => r.name)).toEqual(files);
   });
 });
