@@ -1,13 +1,12 @@
-// Minimal HTTP client for tests. `send` decides where requests go: an in-memory
-// Hono app (`app.request`) or a real server (`fetch(baseUrl + path, init)`).
-export type Send = (path: string, init?: RequestInit) => Response | Promise<Response>;
+// Minimal test client over anything with a `request` method (e.g. a Hono app).
+type App = { request: (path: string, init?: RequestInit) => Response | Promise<Response> };
 
-export function createClient(send: Send) {
+export function createClient(app: App) {
   return {
     // Redirects are not followed, so tests can assert on the 302 itself.
-    get: async (path: string) => send(path, { redirect: "manual" }),
+    get: async (path: string) => app.request(path, { redirect: "manual" }),
     post: async (path: string, body: unknown) =>
-      send(path, {
+      app.request(path, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),

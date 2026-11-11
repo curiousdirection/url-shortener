@@ -10,7 +10,7 @@ const pool = createPool();
 const redis = createRedis();
 const app = buildApp(createUrlService(pool, createCodeGenerator(redis)), "http://short.test");
 
-const client = createClient((path, init) => app.request(path, init));
+const client = createClient(app);
 const post = (body: unknown) => client.post("/api/urls", body);
 
 beforeEach(async () => {
