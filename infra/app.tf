@@ -7,6 +7,9 @@ data "aws_ssm_parameter" "al2023_arm64" {
 # Key behind the default "aws/ssm" alias, used to encrypt the SecureString.
 data "aws_kms_alias" "ssm" {
   name = "alias/aws/ssm"
+
+  # AWS creates this managed key on the first SecureString, so read it after the parameter exists.
+  depends_on = [aws_ssm_parameter.db_password]
 }
 
 # Releases

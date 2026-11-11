@@ -21,7 +21,7 @@ Internet -> NLB (2 public subnets) -> Auto Scaling group of EC2 (:3000) -> RDS P
 cd infra
 cp terraform.tfvars.example terraform.tfvars   # set budget_alert_email
 terraform init
-terraform apply -target=aws_s3_bucket.releases   # the bucket must exist before the first release
+terraform apply -target=aws_s3_bucket.releases -var app_version=none   # the bucket must exist before the first release
 ./scripts/release.sh                             # prints the next command
 terraform apply -var app_version=<printed version>
 ```
@@ -36,7 +36,7 @@ The first apply waits up to 10 minutes for the targets to become healthy. If it 
 
 ## Releasing
 
-Commit, run `infra/scripts/release.sh`, then run the `terraform apply -var app_version=...` it prints. The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
+Commit, run `infra/scripts/release.sh`, then run the `terraform apply -var app_version=...` it prints. `app_version` has no default, so pass it on every apply (use the version currently deployed when changing other settings). The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
 
 ## Scaling
 

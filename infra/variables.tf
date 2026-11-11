@@ -10,9 +10,8 @@ variable "region" {
 }
 
 variable "app_version" {
-  description = "Release id (git short sha) uploaded by scripts/release.sh. Changing it replaces the instances."
+  description = "Release id (git short sha) uploaded by scripts/release.sh. Changing it replaces the instances. No default: pass it on every apply."
   type        = string
-  default     = "unreleased"
 }
 
 variable "domain_name" {
@@ -25,6 +24,11 @@ variable "route53_zone_id" {
   description = "Hosted zone that holds domain_name. Used for ACM DNS validation and the alias record."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.domain_name == null || var.route53_zone_id != null
+    error_message = "domain_name needs route53_zone_id too (used for DNS validation and the alias record)."
+  }
 }
 
 variable "budget_alert_email" {

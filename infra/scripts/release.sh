@@ -15,6 +15,7 @@ VERSION="$(git rev-parse --short HEAD)"
 BUCKET="${RELEASE_BUCKET:-$(terraform -chdir=infra output -raw release_bucket)}"
 
 npm ci
+rm -rf dist # no stale compiled files in the release
 npm run build
 
 TARBALL="$(mktemp -d)/url-shortener-$VERSION.tgz"

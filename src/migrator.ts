@@ -12,6 +12,7 @@ const MIGRATION_LOCK_KEY = 727_001;
 // makes the others wait, then find everything already applied.
 export async function runMigrations(pool: pg.Pool, dir = defaultDir): Promise<void> {
   const client = await pool.connect();
+  let destroyClient = false; // set if cleanup fails, so a lock can't linger on a pooled connection
   try {
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
     try {
@@ -47,14 +48,14 @@ export async function runMigrations(pool: pg.Pool, dir = defaultDir): Promise<vo
           await client.query("COMMIT");
           console.log(`applied ${file}`);
         } catch (e) {
-          await client.query("ROLLBACK");
+          await client.query("ROLLBACK").catch(() => (destroyClient = true));
           throw e;
         }
       }
     } finally {
-      await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+      await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => (destroyClient = true));
     }
   } finally {
-    client.release();
+    client.release(destroyClient);
   }
 }

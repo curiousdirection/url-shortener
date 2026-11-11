@@ -56,6 +56,8 @@ resource "aws_lb_target_group" "app" {
 
   # Targets see the NLB's address, so their security group can allow the NLB's
   # security group (rather than every client IP).
+  # Caveat: AWS documents ~55,000 connections/min per target with this off. At full
+  # scale (mostly new connections, ~2,900/s per target at peak) that must be load-tested.
   preserve_client_ip = "false"
 
   health_check {
@@ -94,11 +96,6 @@ resource "aws_acm_certificate" "main" {
 
   lifecycle {
     create_before_destroy = true
-
-    precondition {
-      condition     = var.route53_zone_id != null
-      error_message = "domain_name needs route53_zone_id too (used for DNS validation and the alias record)."
-    }
   }
 }
 

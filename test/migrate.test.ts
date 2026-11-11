@@ -21,7 +21,7 @@ beforeAll(async () => {
   pool = new pg.Pool({ connectionString: withDb(dbName) });
 });
 afterAll(async () => {
-  await pool.end();
+  await pool?.end();
   await admin.query(`DROP DATABASE IF EXISTS ${dbName}`);
   await admin.end();
 });
