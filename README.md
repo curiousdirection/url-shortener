@@ -2,6 +2,14 @@
 
 Node + TypeScript + Hono + Postgres. Short codes come from a Redis counter (`INCR url:counter`), base62-encoded and offset so codes are at least 6 characters.
 
+## Assumptions
+
+Design decisions (code length, storage, caching) are sized against these:
+
+- Some links point to private content, so codes must not be guessable.
+- Up to 1 billion stored URLs.
+- 100 million daily active users.
+
 ## Run
 
 ```bash
