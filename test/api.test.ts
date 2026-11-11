@@ -3,13 +3,11 @@ import { buildApp } from "../src/app.js";
 import { encode } from "../src/base62.js";
 import { createCodeGenerator } from "../src/codeGenerator.js";
 import { createPool } from "../src/db.js";
-import { createRedis } from "../src/redis.js";
 import { createUrlService } from "../src/urlService.js";
 import { createClient } from "./support/httpClient.js";
 
 const pool = createPool();
-const redis = createRedis();
-const app = buildApp(createUrlService(pool, createCodeGenerator(redis)), "http://short.test");
+const app = buildApp(createUrlService(pool, createCodeGenerator(pool)), "http://short.test");
 
 const client = createClient(app);
 const post = (body: unknown) => client.post("/api/urls", body);
@@ -19,7 +17,6 @@ beforeEach(async () => {
 });
 afterAll(async () => {
   await pool.end();
-  redis.disconnect();
 });
 
 describe("POST /api/urls", () => {
@@ -56,16 +53,16 @@ describe("POST /api/urls", () => {
   });
 
   it("skips generated codes that collide with a custom alias", async () => {
-    await post({ url: "https://example.com" }); // makes sure the counter exists
-    const counter = Number(await redis.get("url:counter"));
-    // Pre-claim the code the counter will hand out next.
-    const upcoming = encode(62 ** 5 + counter + 1);
+    const { rows } = await pool.query("SELECT nextval('url_code_seq') AS n");
+    const n = Number(rows[0].n);
+    // Pre-claim the code the sequence will hand out next.
+    const upcoming = encode(62 ** 5 + n + 1);
     await pool.query("INSERT INTO urls (code, long_url) VALUES ($1, 'https://claimed.com')", [upcoming]);
     const res = await post({ url: "https://example.com/2" });
     expect(res.status).toBe(201);
     const body = await res.json();
-    // The claimed code is skipped and the following counter value is used.
-    expect(body.code).toBe(encode(62 ** 5 + counter + 2));
+    // The claimed code is skipped and the following sequence value is used.
+    expect(body.code).toBe(encode(62 ** 5 + n + 2));
   });
 });
 

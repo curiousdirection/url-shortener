@@ -1,6 +1,6 @@
 # URL Shortener
 
-Node + TypeScript + Hono + Postgres. Short codes come from a Redis counter (`INCR url:counter`), base62-encoded and offset so codes are at least 6 characters.
+Node + TypeScript + Hono + Postgres. Short codes come from a Postgres sequence (`nextval('url_code_seq')`), base62-encoded and offset so codes are at least 6 characters.
 
 ## Run
 
@@ -34,7 +34,7 @@ Leave out `alias` to get a generated code. Then open `http://localhost:3000/my-l
 
 ## Test
 
-Tests use a separate Postgres (`postgres-test`, port 5433) and Redis (`redis-test`, port 6380), both RAM-only so they are wiped on restart, configured in `.env.test`, because they truncate tables. Vitest refuses to run if the database name doesn't end in `_test`.
+Tests use a separate Postgres (`postgres-test`, port 5433), RAM-only so it is wiped on restart, configured in `.env.test`, because they truncate tables. Vitest refuses to run if the database name doesn't end in `_test`.
 
 ```bash
 docker compose up -d
