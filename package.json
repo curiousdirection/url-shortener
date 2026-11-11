@@ -10,9 +10,6 @@
     "migrate": "tsx src/migrate.ts",
     "test": "vitest run"
   },
-  "engines": {
-    "node": ">=22"
-  },
   "dependencies": {
     "@hono/node-server": "^2.1.7",
     "@hono/zod-validator": "^0.9.1",
