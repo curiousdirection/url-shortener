@@ -4,17 +4,14 @@ import { createCodeGenerator } from "../src/codeGenerator.js";
 import { createPool } from "../src/db.js";
 import { createRedis } from "../src/redis.js";
 import { createUrlService } from "../src/urlService.js";
+import { createClient } from "./support/httpClient.js";
 
 const pool = createPool();
 const redis = createRedis();
 const app = buildApp(createUrlService(pool, createCodeGenerator(redis)), "http://short.test");
 
-const post = (body: unknown) =>
-  app.request("/api/urls", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+const client = createClient((path, init) => app.request(path, init));
+const post = (body: unknown) => client.post("/api/urls", body);
 
 beforeEach(async () => {
   await pool.query("TRUNCATE urls");
@@ -32,7 +29,7 @@ describe("POST /api/urls", () => {
     expect(body.code).toHaveLength(6);
     expect(body.shortUrl).toBe(`http://short.test/${body.code}`);
 
-    const redirect = await app.request(`/${body.code}`);
+    const redirect = await client.get(`/${body.code}`);
     expect(redirect.status).toBe(302);
     expect(redirect.headers.get("location")).toBe("https://example.com/a/very/long/path");
   });
@@ -41,7 +38,7 @@ describe("POST /api/urls", () => {
     const res = await post({ url: "https://example.com", alias: "my-link" });
     expect(res.status).toBe(201);
     expect((await res.json()).code).toBe("my-link");
-    expect((await app.request("/my-link")).status).toBe(302);
+    expect((await client.get("/my-link")).status).toBe(302);
   });
 
   it("returns 409 when alias is taken", async () => {
@@ -74,12 +71,12 @@ describe("POST /api/urls", () => {
 
 describe("GET /:code", () => {
   it("returns 404 for unknown codes", async () => {
-    expect((await app.request("/nope123")).status).toBe(404);
+    expect((await client.get("/nope123")).status).toBe(404);
   });
 });
 
 describe("GET /health", () => {
   it("is ok", async () => {
-    expect((await app.request("/health")).status).toBe(200);
+    expect((await client.get("/health")).status).toBe(200);
   });
 });
