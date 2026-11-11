@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import { encode } from "../src/base62.js";
 import { createCodeGenerator } from "../src/codeGenerator.js";
 import { createPool } from "../src/db.js";
 import { createRedis } from "../src/redis.js";
@@ -55,17 +56,16 @@ describe("POST /api/urls", () => {
   });
 
   it("skips generated codes that collide with a custom alias", async () => {
-    const first = await (await post({ url: "https://example.com" })).json();
-    const next = await redis.get("url:counter");
-    // Pre-claim the next code the counter will hand out.
-    const { encode } = await import("../src/base62.js");
-    const upcoming = encode(62 ** 5 + Number(next) + 1);
+    await post({ url: "https://example.com" }); // makes sure the counter exists
+    const counter = Number(await redis.get("url:counter"));
+    // Pre-claim the code the counter will hand out next.
+    const upcoming = encode(62 ** 5 + counter + 1);
     await pool.query("INSERT INTO urls (code, long_url) VALUES ($1, 'https://claimed.com')", [upcoming]);
     const res = await post({ url: "https://example.com/2" });
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.code).not.toBe(upcoming);
-    expect(body.code).not.toBe(first.code);
+    // The claimed code is skipped and the following counter value is used.
+    expect(body.code).toBe(encode(62 ** 5 + counter + 2));
   });
 });
 
