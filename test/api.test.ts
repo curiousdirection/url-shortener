@@ -65,7 +65,7 @@ describe("POST /api/urls", () => {
     const next = await redis.get("url:counter");
     // Pre-claim the next code the counter will hand out.
     const { encode } = await import("../src/base62.js");
-    const upcoming = encode(62n ** 5n + BigInt(Number(next) + 1));
+    const upcoming = encode(62 ** 5 + Number(next) + 1);
     await pool.query("INSERT INTO urls (code, long_url) VALUES ($1, 'https://claimed.com')", [upcoming]);
     const res = await post({ url: "https://example.com/2" });
     expect(res.status).toBe(201);
