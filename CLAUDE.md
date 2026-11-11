@@ -1,5 +1,12 @@
 # CLAUDE.md
 
+## Design and infrastructure
+
+This is a design exercise (see Assumptions in README.md).
+
+- Size design decisions against the README assumptions and show the calculation.
+- Deploy only on free tiers. When the design needs more than a free tier offers, say what full scale would need instead of adding paid infrastructure.
+
 
 ## When to push
 
