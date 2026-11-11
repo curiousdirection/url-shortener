@@ -73,6 +73,10 @@ npm run migrate:test
 npm test
 ```
 
+## Deploy to AWS
+
+`infra/` has Terraform for an NLB, an auto scaling group of EC2 instances and RDS Postgres. See [infra/README.md](infra/README.md). In production `PORT`, `BASE_URL` and `DATABASE_URL` come from there, not from `.env`.
+
 ## Assumptions
 
 This is a design exercise. Design decisions (code length, storage, caching) are sized against the scale below, but the app runs on free or near-free infrastructure, so the deployed version isn't expected to handle that load.

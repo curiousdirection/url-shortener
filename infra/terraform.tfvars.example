@@ -1,0 +1,18 @@
+# Practice values. Copy to terraform.tfvars (gitignored) and set your email.
+budget_alert_email = "you@example.com"
+
+instance_type = "t4g.micro"
+asg_min       = 1
+asg_max       = 2
+asg_desired   = 1
+
+db_instance_class        = "db.t4g.micro"
+db_allocated_storage     = 20
+db_multi_az              = false
+db_backup_retention_days = 1
+db_deletion_protection   = false
+db_skip_final_snapshot   = true
+
+# Optional TLS:
+# domain_name     = "s.example.com"
+# route53_zone_id = "Z0123456789ABC"
