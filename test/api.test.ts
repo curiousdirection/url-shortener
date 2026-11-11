@@ -1,8 +1,7 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { createCodeGenerator } from "../src/codeGenerator.js";
 import { createPool } from "../src/db.js";
-import { runMigrations } from "../src/migrations.js";
 import { createRedis } from "../src/redis.js";
 import { createUrlService } from "../src/urlService.js";
 
@@ -17,9 +16,6 @@ const post = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
-beforeAll(async () => {
-  await runMigrations(pool);
-});
 beforeEach(async () => {
   await pool.query("TRUNCATE urls");
 });
