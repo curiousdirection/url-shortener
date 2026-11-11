@@ -58,6 +58,11 @@ data "aws_iam_policy_document" "app" {
   statement {
     actions   = ["kms:Decrypt"]
     resources = [data.aws_kms_alias.ssm.target_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ssm.${var.region}.amazonaws.com"]
+    }
   }
 }
 
@@ -114,6 +119,11 @@ resource "aws_launch_template" "app" {
     arn = aws_iam_instance_profile.app.arn
   }
 
+  # 1-minute metrics so target tracking reacts quickly (small extra cost per instance).
+  monitoring {
+    enabled = true
+  }
+
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"
@@ -162,9 +172,17 @@ resource "aws_autoscaling_group" "app" {
   max_size            = var.asg_max
   desired_capacity    = var.asg_desired
 
-  target_group_arns         = [aws_lb_target_group.app.arn]
-  health_check_type         = "ELB"
-  health_check_grace_period = 120
+  target_group_arns = [aws_lb_target_group.app.arn]
+  health_check_type = "ELB"
+  # Instances join the NLB before user data runs: boot (~60-90 s) plus 3 health checks (30 s)
+  # must fit in this, or the ASG replaces them in a loop.
+  health_check_grace_period = 300
+
+  # Keep a booting instance's CPU out of the scaling average.
+  default_instance_warmup = 120
+
+  enabled_metrics     = ["GroupDesiredCapacity", "GroupInServiceInstances", "GroupPendingInstances", "GroupTerminatingInstances", "GroupTotalInstances"]
+  metrics_granularity = "1Minute"
 
   # Make the first apply wait until targets are healthy, so a broken boot fails loudly.
   min_elb_capacity          = var.asg_min
@@ -181,7 +199,9 @@ resource "aws_autoscaling_group" "app" {
     preferences {
       min_healthy_percentage = 100
       max_healthy_percentage = 200
-      instance_warmup        = 120
+      instance_warmup        = 300
+      # Roll back to the previous launch template version if a release never gets healthy.
+      auto_rollback = true
     }
   }
 
