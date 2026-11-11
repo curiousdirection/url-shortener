@@ -41,3 +41,11 @@ docker compose up -d
 npm run migrate:test
 npm test
 ```
+
+## Assumptions
+
+This is a design exercise. Design decisions (code length, storage, caching) are sized against the scale below, but the app runs on free or near-free infrastructure, so the deployed version isn't expected to handle that load.
+
+- Some links point to private content, so codes must not be guessable.
+- Up to 1 billion stored URLs.
+- 100 million daily active users.
