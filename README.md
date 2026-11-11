@@ -2,6 +2,37 @@
 
 Node + TypeScript + Hono + Postgres. Short codes come from a Postgres sequence (`nextval('url_code_seq')`), base62-encoded and offset so codes are at least 6 characters.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    client([Client])
+
+    subgraph app["Node app (Hono)"]
+        routes["app.ts<br/>routes + zod validation"]
+        service["urlService.ts<br/>create / resolve"]
+        gen["codeGenerator.ts<br/>nextval + base62"]
+        routes --> service
+        service -->|"no alias"| gen
+    end
+
+    subgraph pg["Postgres"]
+        urls[("urls<br/>code PK, long_url")]
+        seq[["url_code_seq"]]
+    end
+
+    client -->|"POST /api/urls"| routes
+    client -->|"GET /:code"| routes
+    routes -.->|"201 / 409"| client
+    routes -.->|"302 / 404"| client
+
+    service -->|"INSERT / SELECT"| urls
+    gen -->|"nextval()"| seq
+```
+
+- **Create:** a custom alias is inserted as the code. Otherwise `codeGenerator` takes the next sequence value, base62-encodes it (offset so codes are at least 6 characters) and inserts it. A unique violation on an alias returns `409`; on a generated code (it collided with an alias) the next value is tried, up to 5 times.
+- **Resolve:** `urls` is looked up by primary key `code` and the app answers with a `302` redirect, or `404`.
+
 ## Run
 
 ```bash
