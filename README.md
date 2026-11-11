@@ -20,7 +20,7 @@ npm run dev
 
 ## Test
 
-Requires Postgres and Redis (see `.env.example`), and `npm run migrate` applied.
+Requires Postgres and Redis running (see `.env.example`). The tests apply the migrations themselves.
 
 ```bash
 npm test
