@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPool } from "./db.js";
@@ -6,17 +7,32 @@ const dir = join(import.meta.dirname, "..", "migrations");
 const pool = createPool();
 
 await pool.query(
-  "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+  `CREATE TABLE IF NOT EXISTS schema_migrations (
+    name        TEXT PRIMARY KEY,
+    checksum    TEXT NOT NULL,
+    applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
 );
-const done = new Set((await pool.query("SELECT name FROM schema_migrations")).rows.map((r) => r.name));
+const applied = new Map(
+  (await pool.query("SELECT name, checksum FROM schema_migrations")).rows.map((r) => [r.name, r.checksum]),
+);
 
 for (const file of (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort()) {
-  if (done.has(file)) continue;
+  const sql = await readFile(join(dir, file), "utf8");
+  const checksum = createHash("sha256").update(sql).digest("hex");
+
+  if (applied.has(file)) {
+    if (applied.get(file) !== checksum) {
+      throw new Error(`${file} was modified after being applied; add a new migration instead`);
+    }
+    continue;
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query(await readFile(join(dir, file), "utf8"));
-    await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [file]);
+    await client.query(sql);
+    await client.query("INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)", [file, checksum]);
     await client.query("COMMIT");
     console.log(`applied ${file}`);
   } catch (e) {
