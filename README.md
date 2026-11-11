@@ -1,6 +1,6 @@
 # URL Shortener
 
-Node + TypeScript + Hono + Postgres. Short codes come from a Postgres sequence (`nextval('url_code_seq')`), base62-encoded and offset so codes are at least 6 characters.
+Node + TypeScript + Express + Postgres. Short codes come from a Postgres sequence (`nextval('url_code_seq')`), base62-encoded and offset so codes are at least 6 characters.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ Node + TypeScript + Hono + Postgres. Short codes come from a Postgres sequence (
 flowchart LR
     client([Client])
 
-    subgraph app["Node app (Hono)"]
+    subgraph app["Node app (Express)"]
         routes["app.ts<br/>routes + zod validation"]
         service["urlService.ts<br/>create / resolve"]
         gen["codeGenerator.ts<br/>nextval + base62"]

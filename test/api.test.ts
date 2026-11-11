@@ -16,6 +16,7 @@ beforeEach(async () => {
   await pool.query("TRUNCATE urls");
 });
 afterAll(async () => {
+  await client.close();
   await pool.end();
 });
 

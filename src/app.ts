@@ -1,5 +1,4 @@
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
+import express, { type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import { AliasTakenError, type UrlService } from "./urlService.js";
 
@@ -25,26 +24,49 @@ const createSchema = z.object({
 });
 
 export function buildApp(service: UrlService, baseUrl: string) {
-  const app = new Hono();
+  const app = express();
+  app.disable("x-powered-by");
+  app.use(express.json());
 
-  app.get("/health", (c) => c.json({ status: "ok" }));
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
 
-  app.post("/api/urls", zValidator("json", createSchema), async (c) => {
-    const { url, alias } = c.req.valid("json");
+  app.post("/api/urls", async (req, res) => {
+    const parsed = createSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid request", issues: parsed.error.issues });
+      return;
+    }
+    const { url, alias } = parsed.data;
     try {
       const code = await service.create(url, alias);
-      return c.json({ code, shortUrl: `${baseUrl}/${code}`, longUrl: url }, 201);
+      res.status(201).json({ code, shortUrl: `${baseUrl}/${code}`, longUrl: url });
     } catch (e) {
-      if (e instanceof AliasTakenError) return c.json({ error: "alias already taken" }, 409);
+      if (e instanceof AliasTakenError) {
+        res.status(409).json({ error: "alias already taken" });
+        return;
+      }
       throw e;
     }
   });
 
-  app.get("/:code", async (c) => {
-    const longUrl = await service.resolve(c.req.param("code"));
-    if (!longUrl) return c.json({ error: "not found" }, 404);
-    return c.redirect(longUrl, 302);
+  app.get("/:code", async (req, res) => {
+    const longUrl = await service.resolve(req.params.code);
+    if (!longUrl) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
+    res.redirect(302, longUrl);
   });
+
+  // Express 5 forwards rejected async handlers here. Client errors (e.g. malformed JSON) keep their status.
+  const onError: ErrorRequestHandler = (err, _req, res, _next) => {
+    const status = typeof err?.status === "number" && err.status >= 400 && err.status < 500 ? err.status : 500;
+    if (status === 500) console.error(err);
+    res.status(status).json({ error: status === 500 ? "internal server error" : "bad request" });
+  };
+  app.use(onError);
 
   return app;
 }
