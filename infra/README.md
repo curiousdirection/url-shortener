@@ -38,6 +38,18 @@ The first apply waits up to 10 minutes for the targets to become healthy. If it 
 
 Commit, run `infra/scripts/release.sh`, then run the `terraform apply -var app_version=...` it prints. `app_version` has no default, so pass it on every apply (use the version currently deployed when changing other settings). The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
 
+## Migrations
+
+Each instance runs `node dist/migrate.js` in its boot script, before it starts the server. The database is in private subnets, so nothing outside the VPC can reach it, and running migrations from the instances avoids a separate migrate step (and a bastion or tunnel for it).
+
+Consequences:
+
+- Instances that boot together (first deploy with `asg_desired` > 1, a refresh that launches several at once) would race, so the migrator takes a Postgres advisory lock (`src/migrator.ts`). With the practice defaults (1 instance) there is no race; the lock matters at larger sizes.
+- During a rollout the first new instance migrates while old instances still serve traffic, so every migration must work with both the old and the new code. Renames, drops and type changes need two releases (add, then remove later).
+- A failing migration fails that instance's boot (after 5 tries), so the new instance never goes healthy and the refresh rolls back.
+
+Alternative: run migrations once before the rollout (for example through SSM on one existing instance) and drop the step from `user_data.sh.tftpl`. The lock would then be unnecessary, but the first deploy still needs an instance to run it from, and the backward-compatibility rule stays.
+
 ## Scaling
 
 `asg_desired` only sets the initial size; the ASG ignores later changes so autoscaling (target 60% CPU) and manual scaling are not undone:
