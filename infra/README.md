@@ -27,7 +27,7 @@ terraform apply
 terraform destroy
 ```
 
-Edit `terraform.tfvars` to change sizes or the region (see `variables.tf`). After a destroy, check in the console that nothing is left (RDS snapshots in particular). The defaults skip the final snapshot and turn off deletion protection.
+After a destroy, check in the console that nothing is left (RDS snapshots in particular). The defaults skip the final snapshot and turn off deletion protection.
 
 ## Cost
 
