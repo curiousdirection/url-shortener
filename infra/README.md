@@ -82,7 +82,14 @@ aws autoscaling set-desired-capacity --auto-scaling-group-name <name> --desired-
 terraform destroy
 ```
 
-Then check in the console that nothing is left (Elastic IPs, RDS snapshots, the S3 bucket). The practice defaults skip the final snapshot and turn off deletion protection; full-scale values do the opposite.
+Then check that nothing is left. Both commands should print nothing:
+
+```bash
+aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key=Project,Values=url-shortener --query 'ResourceTagMappingList[].ResourceARN' --output text
+aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
+```
+
+The first lists anything still tagged for this project (servers, load balancer, the release bucket). The second lists database snapshots, which a destroy can leave behind and which keep costing money. The practice defaults skip the final snapshot and turn off deletion protection; full-scale values do the opposite, so there the second command will show the final snapshot until you delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
 
 ## Cost (the figures below are on-demand `us-east-1` prices; other regions, including the default `eu-north-1`, differ. Check with the AWS Pricing Calculator)
 
