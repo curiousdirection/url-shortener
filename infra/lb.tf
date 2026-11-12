@@ -3,7 +3,7 @@
 #
 #   internet -> NLB (:80) -> app servers (:3000)
 #
-# NLB (Network Load Balancer) rather than ALB: at this scale almost every click is a new
+# NLB (Network Load Balancer) rather than ALB (Application Load Balancer): at this scale almost every click is a new
 # connection, and ALB's per-capacity-unit new-connection limit (25/s) would cost ~10x more.
 
 # Firewall for the load balancer: the internet may connect on port 80...
