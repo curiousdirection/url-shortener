@@ -36,6 +36,18 @@ aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query
 
 The first lists anything still tagged for this project. The second lists database snapshots, which a destroy can leave behind and which keep costing money. The defaults skip the final snapshot and turn off deletion protection, so there should be none. Delete a leftover with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
 
+The first command can still list ARNs for a few hours after a successful destroy: the tagging API updates slowly and keeps deleted resources for a while. Before deleting anything by hand, check that `terraform state list` prints nothing, then look up the resource with its own service. For example, these return a not-found error or an empty list once everything is gone:
+
+```bash
+aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener
+aws ec2 describe-vpcs --region eu-north-1 --filters Name=tag:Project,Values=url-shortener
+aws ssm get-parameter --region eu-north-1 --name /url-shortener/db_password
+```
+
+If they do, the ARNs are stale, cost nothing, and drop off on their own.
+
+The second command lists every manual snapshot in the account, not only this project's. Only names starting with `url-shortener-final-` come from this stack.
+
 ## Cost
 
 About $0.02/hour, roughly $14/month if left running, for the database in `eu-north-1` (Stockholm), the default region: `db.t4g.micro` Single-AZ at $0.016/hour plus 20 GB of gp3 storage at $0.12 per GB-month ($2.40/month). These are on-demand prices from the AWS Price List published 2026-11-12; check the AWS Pricing Calculator for current figures and other regions. Cost alerts are account-wide, so they are not part of this Terraform; set a budget once in the AWS console.
