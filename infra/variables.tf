@@ -5,8 +5,9 @@ variable "name" {
 }
 
 variable "region" {
-  type    = string
-  default = "us-east-1"
+  description = "AWS region. A project account is fixed to the region AWS assigned it (eu-north-1 for Europe); check AWS Settings > Project."
+  type        = string
+  default     = "eu-north-1"
 }
 
 variable "app_version" {

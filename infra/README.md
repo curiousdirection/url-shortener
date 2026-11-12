@@ -70,7 +70,7 @@ terraform destroy
 
 Then check in the console that nothing is left (Elastic IPs, RDS snapshots, the S3 bucket). The practice defaults skip the final snapshot and turn off deletion protection; full-scale values do the opposite.
 
-## Cost (on-demand us-east-1; check with the AWS Pricing Calculator)
+## Cost (the figures below are on-demand `us-east-1` prices; other regions, including the default `eu-north-1`, differ. Check with the AWS Pricing Calculator)
 
 Practice, always on: about $0.07/hour, about $52/month (NLB ~$0.039/h, t4g.micro ~$0.014/h, db.t4g.micro ~$0.019/h). At 10 hours a week with `terraform destroy` in between, a few dollars a month. `budget.tf` emails you at 80% of `budget_limit_usd` (actual) and 100% (forecast).
 

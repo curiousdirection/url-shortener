@@ -1,5 +1,6 @@
 # Practice values. Copy to terraform.tfvars (gitignored) and set your email.
 budget_alert_email = "you@example.com"
+region             = "eu-north-1"
 
 instance_type = "t4g.micro"
 asg_min       = 1
