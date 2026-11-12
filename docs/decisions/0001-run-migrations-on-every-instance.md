@@ -14,8 +14,8 @@ Each server runs `node dist/migrate.js` in its boot script, after it installs th
 
 ## Why
 
-- **The database is private.** The servers are the only things that already have network access to it and permission to read its password (from SSM). Nothing extra has to be built or run.
-- **One step per release.** A release is `release.sh` followed by `terraform apply`. There is no separate migration step, bastion host or tunnel to remember.
+- **Migrations must run inside the VPC.** The database is private, so a laptop or CI outside the VPC can't reach it without a tunnel or a public database. The servers are already inside, with network access to the database and permission to read its password (from SSM).
+- **At boot, a release stays one step.** A release is `release.sh` followed by `terraform apply`, with no separate migration step to remember. Running one migration over SSM Session Manager from a single server would also work with a private database, but it adds a step to every release.
 - **Code and schema travel together.** Each server runs the migrations shipped in its own release.
 
 ## Consequences
@@ -28,9 +28,9 @@ Each server runs `node dist/migrate.js` in its boot script, after it installs th
 
 ## Alternatives considered
 
-- **One migration run before the rollout**, for example on an existing server through SSM Session Manager. No lock is needed, but it adds a step to every release, the first deploy still needs a server to run it from, and the old/new compatibility rule still applies.
-- **A bastion host or SSM port forward** from a laptop or CI. This needs a way into the VPC and handles the database password outside AWS.
-- **A public database.** Rejected: a private database is the point of the network layout.
+- **One migration run before the rollout**, from a single server over SSM Session Manager (for example scripted from `release.sh`). This works with the private database and is the closest alternative. No lock is needed, but it adds a step to every release (or more script in `release.sh`), the first deploy still needs a server to run it from, and the old/new compatibility rule still applies.
+- **A bastion host or SSM port forward** from a laptop or CI. This also works with a private database, but the migration runs outside the VPC, so the database password has to be handled outside AWS and there is more to set up than running it on a server.
+- **A public database,** so that a laptop or CI could run migrations directly. Rejected: it exposes the database to the internet only to run migrations, and a private database is the point of the network layout.
 - **A migration tool such as Flyway or node-pg-migrate** would replace the hand-written migrator, and possibly the lock. It would not change where the migrations run.
 
 ## Revisit when
