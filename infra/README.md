@@ -34,7 +34,7 @@ aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key
 aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first lists anything still tagged for this project. The second lists database snapshots, which a destroy can leave behind and which keep costing money. The defaults skip the final snapshot and turn off deletion protection, so there should be none. Delete a leftover with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
+The first lists anything tagged for this project. It updates slowly and can show deleted resources for a few hours: if `terraform state list` prints nothing and a direct lookup (e.g. `aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener`) returns not found, those ARNs are stale and cost nothing. The second lists every manual snapshot in the account; only `url-shortener-final-*` ones come from this stack, and keep costing money. The defaults skip the final snapshot, so there should be none. Delete a leftover with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
 
 ## Cost
 
