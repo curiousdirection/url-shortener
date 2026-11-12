@@ -19,7 +19,7 @@ Internet -> NLB (2 public subnets) -> Auto Scaling group of EC2 (:3000) -> RDS P
 
 ```bash
 cd infra
-cp terraform.tfvars.example terraform.tfvars   # set budget_alert_email
+cp terraform.tfvars.example terraform.tfvars   # optional: adjust sizes and region
 terraform init
 terraform apply -target=aws_s3_bucket.releases -var app_version=none   # the bucket must exist before the first release
 ./scripts/release.sh                             # prints the next command
@@ -72,6 +72,6 @@ Then check in the console that nothing is left (Elastic IPs, RDS snapshots, the 
 
 ## Cost (the figures below are on-demand `us-east-1` prices; other regions, including the default `eu-north-1`, differ. Check with the AWS Pricing Calculator)
 
-Practice, always on: about $0.07/hour, about $52/month (NLB ~$0.039/h, t4g.micro ~$0.014/h, db.t4g.micro ~$0.019/h). At 10 hours a week with `terraform destroy` in between, a few dollars a month. `budget.tf` emails you at 80% of `budget_limit_usd` (actual) and 100% (forecast).
+Practice, always on: about $0.07/hour, about $52/month (NLB ~$0.039/h, t4g.micro ~$0.014/h, db.t4g.micro ~$0.019/h). At 10 hours a week with `terraform destroy` in between, a few dollars a month. Cost alerts are account-wide, so they are not part of this Terraform; set a budget once in the AWS console.
 
 Full scale: about $4,000/month (data transfer out ~$2,660, RDS ~$630, servers ~$370, NLB ~$290, IPv4 ~$40). Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,000/month.

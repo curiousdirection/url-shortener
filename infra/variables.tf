@@ -32,17 +32,6 @@ variable "route53_zone_id" {
   }
 }
 
-variable "budget_alert_email" {
-  description = "Where budget alerts go. Set it in terraform.tfvars, which is gitignored."
-  type        = string
-}
-
-variable "budget_limit_usd" {
-  description = "Monthly cost limit for the budget alert."
-  type        = string
-  default     = "10"
-}
-
 # App servers
 
 variable "instance_type" {
