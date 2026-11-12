@@ -13,6 +13,39 @@ variable "region" {
   default     = "eu-north-1"
 }
 
+# No default on purpose: you must pass it on every `terraform apply`, so a plain apply
+# can't point the servers at a release that doesn't exist.
+variable "app_version" {
+  description = "Release id (git short sha) uploaded by scripts/release.sh. Changing it replaces the instances. No default: pass it on every apply."
+  type        = string
+}
+
+# App servers
+
+variable "instance_type" {
+  description = "EC2 instance type for the app servers. t4g.* and c7g.* are Arm (Graviton) machines; the boot script downloads the arm64 build of Node."
+  type        = string
+  default     = "t4g.micro"
+}
+
+variable "asg_min" {
+  description = "Fewest app servers the auto scaling group keeps running."
+  type        = number
+  default     = 1
+}
+
+variable "asg_max" {
+  description = "Most app servers the auto scaling group may scale out to."
+  type        = number
+  default     = 2
+}
+
+variable "asg_desired" {
+  description = "Initial size only: the ASG ignores later changes so autoscaling and manual scaling are not undone."
+  type        = number
+  default     = 1
+}
+
 # Database
 
 variable "db_instance_class" {

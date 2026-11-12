@@ -1,0 +1,79 @@
+#!/bin/bash
+# Boots one app instance: install Node, fetch the release, configure, migrate, start.
+# Rendered by Terraform; output goes to /var/log/user-data.log.
+set -euo pipefail
+exec > >(tee -a /var/log/user-data.log) 2>&1
+export HOME=/root
+
+REGION="${region}"
+BUCKET="${bucket}"
+VERSION="${app_version}"
+APP_DIR=/opt/url-shortener
+
+# 1. Release
+id -u app >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --shell /sbin/nologin app
+mkdir -p "$APP_DIR"
+aws s3 cp --region "$REGION" "s3://$BUCKET/releases/url-shortener-$VERSION.tgz" /tmp/release.tgz
+tar -xzf /tmp/release.tgz -C "$APP_DIR"
+
+# 2. Node: official arm64 tarball at the release's version (AL2023's packaged Node is older).
+NODE_VERSION="$(tr -d 'v \n' < "$APP_DIR/.node-version")"
+NODE_TARBALL="node-v$NODE_VERSION-linux-arm64.tar.xz"
+cd /tmp
+curl -fsSLO "https://nodejs.org/dist/v$NODE_VERSION/$NODE_TARBALL"
+curl -fsSLO "https://nodejs.org/dist/v$NODE_VERSION/SHASUMS256.txt"
+grep " $NODE_TARBALL\$" SHASUMS256.txt | sha256sum -c -
+tar -xJf "$NODE_TARBALL" -C /opt
+for bin in node npm npx; do ln -sf "/opt/node-v$NODE_VERSION-linux-arm64/bin/$bin" "/usr/local/bin/$bin"; done
+
+cd "$APP_DIR"
+npm ci --omit=dev
+curl -fsSL -o "$APP_DIR/rds-global-bundle.pem" https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+
+# 3. Config. RDS Postgres 16 requires SSL and its CA is not in Node's trust store.
+DB_PASSWORD="$(aws ssm get-parameter --region "$REGION" --name "${db_password_parameter}" \
+  --with-decryption --query Parameter.Value --output text)"
+umask 077
+cat > /etc/url-shortener.env <<ENV
+PORT="3000"
+BASE_URL="${base_url}"
+DATABASE_URL="postgres://${db_user}:$DB_PASSWORD@${db_endpoint}:5432/${db_name}?sslmode=verify-full"
+NODE_EXTRA_CA_CERTS="$APP_DIR/rds-global-bundle.pem"
+ENV
+umask 022
+chown -R app:app "$APP_DIR"
+
+# 4. Migrate (safe to run from several instances at once)
+set -a
+. /etc/url-shortener.env
+set +a
+for attempt in 1 2 3 4 5; do
+  runuser -u app -- node dist/migrate.js && break
+  [ "$attempt" -lt 5 ] || exit 1
+  sleep 5
+done
+
+# 5. Service
+cat > /etc/systemd/system/url-shortener.service <<'UNIT'
+[Unit]
+Description=URL shortener
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=app
+WorkingDirectory=/opt/url-shortener
+EnvironmentFile=/etc/url-shortener.env
+ExecStart=/usr/local/bin/node dist/server.js
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now url-shortener
