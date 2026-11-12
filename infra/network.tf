@@ -6,6 +6,8 @@
 #
 # In practice, teams rarely write a VPC by hand. This uses the community module
 # terraform-aws-modules/vpc/aws, which creates all of the pieces below from a few inputs:
+#   docs:   https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws
+#   source: https://github.com/terraform-aws-modules/terraform-aws-vpc
 #   - the VPC itself (with DNS names switched on)
 #   - the subnets, in the availability zones listed in `azs`
 #   - an internet gateway (the door between the VPC and the internet)
@@ -13,10 +15,13 @@
 #     that route is what makes a subnet "public"
 #   - the RDS subnet group (tells RDS which subnets it may use), exposed as
 #     module.vpc.database_subnet_group_name
-# To see what the module does for you, look up the resources it wraps in the AWS provider
-# docs: aws_vpc, aws_subnet, aws_internet_gateway, aws_route_table and aws_db_subnet_group.
 #
-# Docs: https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws
+# To see what the module does for you, these are the AWS provider resources it wraps:
+#   aws_vpc               https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc
+#   aws_subnet            https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet
+#   aws_internet_gateway  https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway
+#   aws_route_table       https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table
+#   aws_db_subnet_group   https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group
 
 # An availability zone (AZ) is a separate data center inside the region. This looks up the
 # ones that are currently usable.
