@@ -135,6 +135,10 @@ resource "aws_vpc_security_group_egress_rule" "app_all" {
 }
 
 locals {
+  # The provider's default_tags don't reach instances and disks launched by the auto scaling
+  # group, so the launch template tags them itself (used in billing reports).
+  launch_tags = { Project = var.name, ManagedBy = "terraform" }
+
   # The address the app puts in the short links it returns.
   base_url = "http://${aws_lb.main.dns_name}"
 }
@@ -198,10 +202,14 @@ resource "aws_launch_template" "app" {
     db_password_parameter = aws_ssm_parameter.db_password.name
   }))
 
-  # Name the servers in the console.
+  # Name and tag the servers, and tag their disks.
   tag_specifications {
     resource_type = "instance"
-    tags          = { Name = var.name }
+    tags          = merge(local.launch_tags, { Name = var.name })
+  }
+  tag_specifications {
+    resource_type = "volume"
+    tags          = merge(local.launch_tags, { Name = var.name })
   }
 
   lifecycle {

@@ -25,3 +25,6 @@ aws s3 cp "$TARBALL" "s3://$BUCKET/releases/"
 echo
 echo "Uploaded release $VERSION. Deploy it with:"
 echo "  terraform -chdir=infra apply -var app_version=$VERSION"
+echo
+echo "Terraform does not wait for the rolling replacement to finish. Watch it with:"
+echo "  aws autoscaling describe-instance-refreshes --auto-scaling-group-name \$(terraform -chdir=infra output -raw asg_name)"

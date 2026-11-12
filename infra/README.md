@@ -39,6 +39,14 @@ The first apply waits up to 10 minutes for the targets to become healthy. If it 
 
 Commit, run `infra/scripts/release.sh`, then run the `terraform apply -var app_version=...` it prints. `app_version` has no default, so pass it on every apply (use the version currently deployed when changing other settings). The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
 
+`terraform apply` does not wait for the rolling replacement to finish, so a successful apply does not mean the release is healthy. Watch it with:
+
+```bash
+aws autoscaling describe-instance-refreshes --auto-scaling-group-name $(terraform output -raw asg_name)
+```
+
+If the new version never gets healthy, `auto_rollback` puts the group back on the previous launch template version. Terraform still has the new version in its state, so the next `apply` would start the same broken refresh again. Re-apply with the last good `app_version` instead.
+
 ## Migrations
 
 Each instance runs `node dist/migrate.js` in its boot script, before it starts the server. The database is in private subnets, so nothing outside the VPC can reach it, and running migrations from the instances avoids a separate migrate step (and a bastion or tunnel for it).
@@ -47,9 +55,15 @@ Consequences:
 
 - Instances that boot together (first deploy with `asg_desired` > 1, a refresh that launches several at once) would race, so the migrator takes a Postgres advisory lock (`src/migrator.ts`). With the practice defaults (1 instance) there is no race; the lock matters at larger sizes.
 - During a rollout the first new instance migrates while old instances still serve traffic, so every migration must work with both the old and the new code. Renames, drops and type changes need two releases (add, then remove later).
-- A failing migration fails that instance's boot (after 5 tries), so the new instance never goes healthy and the refresh rolls back.
+- A failing migration fails that instance's boot (after 5 tries), so the new instance never goes healthy and the refresh rolls back (see "Releasing" for what to do next).
 
 Alternative: run migrations once before the rollout (for example through SSM on one existing instance) and drop the step from `user_data.sh.tftpl`. The lock would then be unnecessary, but the first deploy still needs an instance to run it from, and the backward-compatibility rule stays.
+
+## Known limitations
+
+- **Every boot downloads Node from nodejs.org and runs `npm ci` against the npm registry.** If either is slow or down, new instances (including scale-out) fail their health checks and get replaced in a loop, and `npm ci` on a `t4g.micro` uses part of the 300 s grace period. A fix is to ship production `node_modules` in the release tarball and host the Node tarball in the release bucket or bake an AMI.
+- **`/health` doesn't check the database,** so an instance that has lost its database connection stays in service. Checking it has a cost too: a database blip would make every instance unhealthy at once.
+- **`terraform apply` doesn't wait for a release to finish rolling out** (see "Releasing").
 
 ## Scaling
 

@@ -78,8 +78,14 @@ variable "db_deletion_protection" {
   default     = false
 }
 
+variable "db_apply_immediately" {
+  description = "If true, database changes (such as a new instance class, which restarts it) are applied straight away. If false, they wait for the weekly maintenance window."
+  type        = bool
+  default     = true
+}
+
 variable "db_skip_final_snapshot" {
-  description = "If true, no backup is taken when the database is deleted. If false, a final snapshot named <name>-final is kept (and keeps costing money)."
+  description = "If true, no backup is taken when the database is deleted. If false, a final snapshot named <name>-final is kept and keeps costing money; delete it before the next destroy, or that destroy fails because the name already exists."
   type        = bool
   default     = true
 }

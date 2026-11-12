@@ -16,6 +16,11 @@ output "rds_endpoint" {
   value = aws_db_instance.main.endpoint
 }
 
+# The auto scaling group's name, for checking a rolling release (see README, "Releasing").
+output "asg_name" {
+  value = aws_autoscaling_group.app.name
+}
+
 # Where scripts/release.sh uploads the app. It reads this value to find the bucket.
 output "release_bucket" {
   value = aws_s3_bucket.releases.id

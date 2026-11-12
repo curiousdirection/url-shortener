@@ -79,6 +79,7 @@ resource "aws_db_instance" "main" {
 
   # Let AWS apply small Postgres updates (e.g. 16.4 -> 16.5) automatically.
   auto_minor_version_upgrade = true
-  # Apply changes straight away instead of waiting for the weekly maintenance window.
-  apply_immediately = true
+  # true: apply changes straight away. false: wait for the weekly maintenance window (a
+  # change such as a new instance class restarts the database, so full scale uses false).
+  apply_immediately = var.db_apply_immediately
 }

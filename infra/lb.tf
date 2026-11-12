@@ -9,7 +9,7 @@
 # Firewall for the load balancer: the internet may connect on port 80...
 resource "aws_security_group" "nlb" {
   name_prefix = "${var.name}-nlb-"
-  description = "Public HTTP(S) into the NLB"
+  description = "Public HTTP into the NLB"
   vpc_id      = module.vpc.vpc_id
 
   lifecycle {
@@ -56,7 +56,8 @@ resource "aws_lb_target_group" "app" {
   port        = 3000
 
   # When a server is removed, wait up to 30 s for its open connections to finish before
-  # cutting it off. The app's own shutdown handler (src/server.ts) is sized to fit this.
+  # cutting it off. The auto scaling group waits for this before it stops the instance, so
+  # the app only receives SIGTERM (see src/server.ts) after traffic has drained.
   deregistration_delay = 30
 
   # The load balancer calls GET /health on each server every 10 s. 3 passes in a row mark

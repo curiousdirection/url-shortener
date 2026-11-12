@@ -20,8 +20,9 @@ const shutdown = (signal: string) => {
   shuttingDown = true;
   console.log(`${signal} received, shutting down`);
 
-  // Backstop in case a client holds a connection open. Keep below systemd TimeoutStopSec (30 s,
-  // infra/user_data.sh.tftpl) and the NLB deregistration delay (infra/lb.tf).
+  // Backstop in case a client holds a connection open. Keep below systemd TimeoutStopSec
+  // (30 s, infra/user_data.sh.tftpl). The ASG waits out the NLB deregistration delay before
+  // stopping the instance, so SIGTERM arrives after traffic has drained.
   setTimeout(() => process.exit(1), 25_000).unref();
 
   // close() also drops idle keep-alive connections (Node 19+).

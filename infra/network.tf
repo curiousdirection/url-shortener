@@ -13,8 +13,8 @@
 #     that route is what makes a subnet "public"
 #   - the RDS subnet group (tells RDS which subnets it may use), exposed as
 #     module.vpc.database_subnet_group_name
-# The hand-written version of this file, with each of those as its own resource, is in git
-# history (commit 154c24a) if you want to see what the module does for you.
+# To see what the module does for you, look up the resources it wraps in the AWS provider
+# docs: aws_vpc, aws_subnet, aws_internet_gateway, aws_route_table and aws_db_subnet_group.
 #
 # Docs: https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws
 

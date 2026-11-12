@@ -25,9 +25,13 @@ beforeAll(async () => {
   await runMigrations(pool);
 });
 afterAll(async () => {
-  child?.kill("SIGKILL");
+  if (child && child.exitCode === null && child.signalCode === null) {
+    child.kill("SIGKILL");
+    await once(child, "exit");
+  }
   await pool?.end();
-  await admin.query(`DROP DATABASE IF EXISTS ${dbName}`);
+  // FORCE disconnects anything still attached, so the drop can't race a dying connection.
+  await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
   await admin.end();
 });
 
@@ -46,31 +50,39 @@ describe("graceful shutdown", () => {
       env: { ...process.env, PORT: String(port), DATABASE_URL: withDb(dbName) },
       stdio: ["ignore", "pipe", "inherit"],
     });
-    await new Promise<void>((resolve) => {
-      child!.stdout!.on("data", (d) => String(d).includes("listening") && resolve());
-    });
     const exited = once(child, "exit");
+    // Fail with a clear message if the server dies before it starts listening.
+    await new Promise<void>((resolve, reject) => {
+      child!.stdout!.on("data", (d) => String(d).includes("listening") && resolve());
+      child!.once("exit", (code) => reject(new Error(`server exited early with code ${code}`)));
+    });
 
     // Block the request's SELECT on a table lock so it is still in flight when SIGTERM arrives.
     const lock = await pool.connect();
-    await lock.query("BEGIN");
-    await lock.query("LOCK TABLE urls IN ACCESS EXCLUSIVE MODE");
-    const response = fetch(`http://127.0.0.1:${port}/nosuchcode`, { redirect: "manual" });
-    for (;;) {
-      const { rowCount } = await pool.query(
-        "SELECT 1 FROM pg_stat_activity WHERE datname = $1 AND wait_event_type = 'Lock'",
-        [dbName],
-      );
-      if (rowCount) break;
-      await new Promise((r) => setTimeout(r, 20));
+    let response: Promise<Response>;
+    try {
+      await lock.query("BEGIN");
+      await lock.query("LOCK TABLE urls IN ACCESS EXCLUSIVE MODE");
+      response = fetch(`http://127.0.0.1:${port}/nosuchcode`, { redirect: "manual" });
+      for (;;) {
+        const { rowCount } = await pool.query(
+          "SELECT 1 FROM pg_stat_activity WHERE datname = $1 AND wait_event_type = 'Lock'",
+          [dbName],
+        );
+        if (rowCount) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+
+      child.kill("SIGTERM");
+      const early = await Promise.race([exited, new Promise((r) => setTimeout(() => r("still running"), 300))]);
+      expect(early).toBe("still running");
+
+      await lock.query("COMMIT");
+    } finally {
+      // After COMMIT this does nothing; if an assertion failed above it frees the table lock.
+      await lock.query("ROLLBACK").catch(() => {});
+      lock.release();
     }
-
-    child.kill("SIGTERM");
-    const early = await Promise.race([exited, new Promise((r) => setTimeout(() => r("still running"), 300))]);
-    expect(early).toBe("still running");
-
-    await lock.query("COMMIT");
-    lock.release();
 
     expect((await response).status).toBe(404);
     const [code] = await exited;
