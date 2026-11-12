@@ -13,7 +13,8 @@ VPC: 2 public subnets (empty for now) + 2 database subnets -> RDS Postgres 16
 
 ## Prerequisites
 
-- Terraform >= 1.9 and an AWS CLI profile that can create the resources (`export AWS_PROFILE=...`). The tested version is pinned in `.terraform-version` at the repo root; with [tfenv](https://github.com/tfutils/tfenv), run `tfenv install` once and it is used automatically.
+- [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` once in the repo; it installs the pinned version from `.terraform-version`.
+- An AWS CLI profile that can create the resources (`export AWS_PROFILE=...`).
 - The default region is `eu-north-1`. A project account is fixed to the region AWS assigned it, so check AWS Settings > Project.
 
 ## Apply and destroy
