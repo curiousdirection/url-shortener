@@ -26,7 +26,7 @@ cd infra
 cp terraform.tfvars.example terraform.tfvars   # optional: adjust sizes and region
 terraform init
 terraform apply -target=aws_s3_bucket.releases -var app_version=none   # the bucket must exist before the first release
-./scripts/release.sh                             # prints the next command
+./scripts/release.sh                             # prints the next command (works from any directory)
 terraform apply -var app_version=<printed version>
 ```
 
@@ -40,7 +40,7 @@ The first apply waits up to 10 minutes for the targets to become healthy. If it 
 
 ## Releasing
 
-Commit, run `infra/scripts/release.sh`, then run the `terraform apply -var app_version=...` it prints. `app_version` has no default, so pass it on every apply (use the version currently deployed when changing other settings). The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
+Commit, run `infra/scripts/release.sh` (from any directory), then run the `terraform apply -var app_version=...` it prints. The printed commands use `terraform -chdir=` with the absolute path to `infra/`, so they work from any directory too. `app_version` has no default, so pass it on every apply (use the version currently deployed when changing other settings). The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
 
 `terraform apply` does not wait for the rolling replacement to finish, so a successful apply does not mean the release is healthy. Watch it with:
 
@@ -79,17 +79,19 @@ aws autoscaling set-desired-capacity --auto-scaling-group-name <name> --desired-
 ## Tear down
 
 ```bash
-terraform destroy
+terraform destroy -var app_version=none
 ```
 
-Then check that nothing is left. Both commands should print nothing:
+`app_version` has no default, so destroy asks for it too (or fails when not interactive). Nothing is deployed on the way down, so any value works.
+
+After a destroy, check that nothing is left. Both commands should print nothing:
 
 ```bash
 aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key=Project,Values=url-shortener --query 'ResourceTagMappingList[].ResourceARN' --output text
 aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first lists anything still tagged for this project (servers, load balancer, the release bucket). The second lists database snapshots, which a destroy can leave behind and which keep costing money. The practice defaults skip the final snapshot and turn off deletion protection; full-scale values do the opposite, so there the second command will show the final snapshot until you delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
+The first lists anything tagged for this project (servers, load balancer, the release bucket, the database). It updates slowly and can show deleted resources for a few hours: if `terraform state list` prints nothing and a direct lookup (e.g. `aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener`, or `aws elbv2 describe-load-balancers --region eu-north-1 --names url-shortener` for the load balancer) returns not found, those ARNs are stale and cost nothing. The second lists every manual snapshot in the account; only `url-shortener-final-*` ones come from this stack, and keep costing money. The practice defaults skip the final snapshot and turn off deletion protection, so there should be none; full-scale values do the opposite, so there the second command will show the final snapshot until you delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
 
 ## Cost (the figures below are on-demand `us-east-1` prices; other regions, including the default `eu-north-1`, differ. Check with the AWS Pricing Calculator)
 
@@ -97,4 +99,6 @@ Practice, always on: about $0.07/hour, about $52/month (NLB ~$0.039/h, t4g.micro
 
 In `eu-north-1`, the default region, the database alone is about $0.02/hour (roughly $14/month): `db.t4g.micro` Single-AZ at $0.016/hour plus 20 GB of gp3 at $0.12 per GB-month. These figures come from the AWS Price List published 2026-11-12.
 
-Full scale: about $4,000/month (data transfer out ~$2,660, RDS ~$630, servers ~$370, NLB ~$290, IPv4 ~$40). Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,000/month.
+Full scale: about $4,300/month (data transfer out ~$2,660, RDS ~$630, servers ~$370, NLB ~$290, cross-zone traffic ~$300, IPv4 ~$40).
+
+The cross-zone figure is approximate. The NLB has cross-zone load balancing on, so about half of the responses (with 2 AZs and evenly spread servers) go from a server in one AZ to a load balancer node in the other. AWS bills inter-AZ traffic at $0.01/GB at each end, $0.02/GB in all. Half of the ~30 TB/month behind the data-transfer-out figure is ~15 TB, about $300/month; the small request side adds little. Practice size pays cents. Turning cross-zone off removes this cost but then each AZ's servers only get that AZ's share of the load. Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,000/month.

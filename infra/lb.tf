@@ -43,7 +43,8 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.nlb.id]
 
   # Let each load balancer node send traffic to servers in either AZ, so the load stays
-  # even if the servers are unevenly spread.
+  # even if the servers are unevenly spread. Cost: traffic that crosses between AZs is billed
+  # as inter-AZ data transfer (see "Cost" in README.md).
   enable_cross_zone_load_balancing = true
 }
 

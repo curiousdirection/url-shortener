@@ -12,7 +12,8 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 VERSION="$(git rev-parse --short HEAD)"
 
-BUCKET="${RELEASE_BUCKET:-$(terraform -chdir=infra output -raw release_bucket)}"
+# $ROOT is an absolute path, so this and the commands printed below work from any directory.
+BUCKET="${RELEASE_BUCKET:-$(terraform -chdir="$ROOT/infra" output -raw release_bucket)}"
 
 npm ci
 rm -rf dist # no stale compiled files in the release
@@ -24,7 +25,7 @@ aws s3 cp "$TARBALL" "s3://$BUCKET/releases/"
 
 echo
 echo "Uploaded release $VERSION. Deploy it with:"
-echo "  terraform -chdir=infra apply -var app_version=$VERSION"
+echo "  terraform -chdir=\"$ROOT/infra\" apply -var app_version=$VERSION"
 echo
 echo "Terraform does not wait for the rolling replacement to finish. Watch it with:"
-echo "  aws autoscaling describe-instance-refreshes --auto-scaling-group-name \$(terraform -chdir=infra output -raw asg_name)"
+echo "  aws autoscaling describe-instance-refreshes --auto-scaling-group-name \$(terraform -chdir=\"$ROOT/infra\" output -raw asg_name)"

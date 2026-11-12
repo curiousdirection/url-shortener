@@ -26,6 +26,13 @@ variable "instance_type" {
   description = "EC2 instance type for the app servers. t4g.* and c7g.* are Arm (Graviton) machines; the boot script downloads the arm64 build of Node."
   type        = string
   default     = "t4g.micro"
+
+  # The image and boot script are Arm-only, so an x86 type (t3, c7i, ...) would fail at boot.
+  # Graviton types have a "g" after the generation number (t4g, c7g, c7gn, m6gd, ...).
+  validation {
+    condition     = can(regex("^[a-z]+[0-9]+g[a-z]*\\.", var.instance_type))
+    error_message = "instance_type must be an Arm (Graviton) type such as t4g.micro or c7g.large; the image and boot script are arm64-only."
+  }
 }
 
 variable "asg_min" {

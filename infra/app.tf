@@ -9,6 +9,8 @@ data "aws_caller_identity" "current" {}
 # AWS publishes the id of the newest Amazon Linux 2023 (Arm) image as a public parameter.
 # Reading it means new servers always start from a current, patched image. (A new image
 # changes the launch template and rolls the servers on your next apply.)
+# The image id is public, not a secret. The launch template reads `insecure_value` because
+# plain `value` is always hidden in plan output, which would hide an image change.
 data "aws_ssm_parameter" "al2023_arm64" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 }
@@ -158,7 +160,7 @@ locals {
 # which firewall and which boot script. The auto scaling group stamps out servers from it.
 resource "aws_launch_template" "app" {
   name_prefix   = "${var.name}-"
-  image_id      = data.aws_ssm_parameter.al2023_arm64.value
+  image_id      = data.aws_ssm_parameter.al2023_arm64.insecure_value
   instance_type = var.instance_type
 
   # Each change creates a new numbered version; make the newest one the default.
@@ -276,12 +278,6 @@ resource "aws_autoscaling_group" "app" {
       # Roll back to the previous launch template version if a release never gets healthy.
       auto_rollback = true
     }
-  }
-
-  tag {
-    key                 = "Name"
-    value               = var.name
-    propagate_at_launch = true
   }
 
   lifecycle {
