@@ -1,5 +1,7 @@
 # The app servers: where the code is stored, what the servers are allowed to do, and the
-# auto scaling group that keeps the right number of them running.
+# auto scaling group that keeps the right number of them running. The role and firewall are
+# hand-written (they are specific to this project); the launch template and auto scaling
+# group use the community module terraform-aws-modules/autoscaling/aws.
 #
 #   release.sh -> S3 bucket -> (each server downloads it at boot, see user_data.sh.tftpl)
 
@@ -110,7 +112,7 @@ resource "aws_iam_instance_profile" "app" {
 resource "aws_security_group" "app" {
   name_prefix = "${var.name}-app-"
   description = "App port from the NLB only; no SSH (use SSM Session Manager)"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = module.vpc.vpc_id
 
   lifecycle {
     create_before_destroy = true
@@ -120,7 +122,7 @@ resource "aws_security_group" "app" {
 # The only inbound traffic allowed: port 3000 (the app) from the load balancer.
 resource "aws_vpc_security_group_ingress_rule" "app_from_nlb" {
   security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.nlb.id
+  referenced_security_group_id = module.nlb.security_group_id
   ip_protocol                  = "tcp"
   from_port                    = 3000
   to_port                      = 3000
@@ -136,53 +138,62 @@ resource "aws_vpc_security_group_egress_rule" "app_all" {
 
 locals {
   # The address the app puts in the short links it returns.
-  base_url = "http://${aws_lb.main.dns_name}"
+  base_url = "http://${module.nlb.dns_name}"
 }
 
-# A launch template is the recipe for one app server: which image, what size, which role,
-# which firewall and which boot script. The auto scaling group stamps out servers from it.
-resource "aws_launch_template" "app" {
-  name_prefix   = "${var.name}-"
+# The auto scaling group (ASG) keeps between asg_min and asg_max servers running, replaces
+# any that fail, and adds or removes servers as load changes. The module also creates the
+# launch template: the recipe for one server (which image, what size, which role, which
+# firewall, which boot script) that the group stamps servers out of.
+# Docs: https://registry.terraform.io/modules/terraform-aws-modules/autoscaling/aws
+module "asg" {
+  source  = "terraform-aws-modules/autoscaling/aws"
+  version = "~> 9.0"
+
+  name = var.name
+
+  # --- The recipe for one server (the launch template) ---
   image_id      = data.aws_ssm_parameter.al2023_arm64.value
   instance_type = var.instance_type
-
   # Each change creates a new numbered version; make the newest one the default.
   update_default_version = true
-
-  iam_instance_profile {
-    arn = aws_iam_instance_profile.app.arn
-  }
+  # The role from above, so servers can reach SSM, S3 and the DB password.
+  iam_instance_profile_arn = aws_iam_instance_profile.app.arn
 
   # 1-minute metrics so target tracking reacts quickly (small extra cost per instance).
-  monitoring {
-    enabled = true
-  }
+  enable_monitoring = true
 
   # IMDSv2 only: code on the server must fetch a session token before reading its own
   # credentials. This blocks a class of attacks where a bug in an app tricks it into
   # leaking them.
-  metadata_options {
+  metadata_options = {
     http_endpoint = "enabled"
     http_tokens   = "required"
   }
 
   # Give each server a public IP (so it can reach the internet without a NAT gateway) and
   # attach the app firewall.
-  network_interfaces {
-    associate_public_ip_address = true
-    security_groups             = [aws_security_group.app.id]
-  }
+  network_interfaces = [
+    {
+      device_index                = 0
+      associate_public_ip_address = true
+      security_groups             = [aws_security_group.app.id]
+      delete_on_termination       = true
+    }
+  ]
 
   # The server's disk: 8 GiB, encrypted, deleted together with the server.
-  block_device_mappings {
-    device_name = "/dev/xvda"
-    ebs {
-      volume_size           = 8
-      volume_type           = "gp3"
-      encrypted             = true
-      delete_on_termination = true
+  block_device_mappings = [
+    {
+      device_name = "/dev/xvda"
+      ebs = {
+        volume_size           = 8
+        volume_type           = "gp3"
+        encrypted             = true
+        delete_on_termination = true
+      }
     }
-  }
+  ]
 
   # The boot script (user_data.sh.tftpl) with the values filled in. It runs once when each
   # server first starts. Changing anything in it (for example `app_version`) creates a new
@@ -192,36 +203,38 @@ resource "aws_launch_template" "app" {
     bucket                = aws_s3_bucket.releases.id
     app_version           = var.app_version
     base_url              = local.base_url
-    db_endpoint           = aws_db_instance.main.address
-    db_name               = aws_db_instance.main.db_name
-    db_user               = aws_db_instance.main.username
+    db_endpoint           = module.db.db_instance_address
+    db_name               = module.db.db_instance_name
+    db_user               = module.db.db_instance_username
     db_password_parameter = aws_ssm_parameter.db_password.name
   }))
 
   # Name the servers in the console.
-  tag_specifications {
-    resource_type = "instance"
-    tags          = { Name = var.name }
-  }
+  tag_specifications = [
+    {
+      resource_type = "instance"
+      tags          = { Name = var.name }
+    }
+  ]
 
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# The auto scaling group (ASG): keeps between asg_min and asg_max servers running, replaces
-# any that fail, and adds or removes servers as load changes.
-resource "aws_autoscaling_group" "app" {
-  name_prefix = "${var.name}-"
+  # --- The group itself ---
   # Start servers in the public subnets, spread across both AZs.
-  vpc_zone_identifier = aws_subnet.public[*].id
+  vpc_zone_identifier = module.vpc.public_subnets
   min_size            = var.asg_min
   max_size            = var.asg_max
   desired_capacity    = var.asg_desired
+  # The scaling policy and manual changes move the desired count. Without this, the next
+  # `terraform apply` would reset it to asg_desired.
+  ignore_desired_capacity_changes = true
 
-  # Register new servers with the load balancer's target group. Use the load balancer's
+  # Register new servers in the load balancer's target group. Use the load balancer's
   # health check (not just "is the machine on") to decide whether a server is healthy.
-  target_group_arns = [aws_lb_target_group.app.arn]
+  traffic_source_attachments = {
+    nlb = {
+      traffic_source_identifier = module.nlb.target_groups["app"].arn
+      traffic_source_type       = "elbv2"
+    }
+  }
   health_check_type = "ELB"
   # Instances join the NLB before user data runs: boot (~60-90 s) plus 3 health checks (30 s)
   # must fit in this, or the ASG replaces them in a loop.
@@ -230,27 +243,20 @@ resource "aws_autoscaling_group" "app" {
   # Keep a booting instance's CPU out of the scaling average.
   default_instance_warmup = 120
 
+  # Wait up to 10 minutes on the first apply for the servers to start.
+  wait_for_capacity_timeout = "10m"
+
   # Publish group-level metrics (how many servers are in service, pending and so on).
   enabled_metrics     = ["GroupDesiredCapacity", "GroupInServiceInstances", "GroupPendingInstances", "GroupTerminatingInstances", "GroupTotalInstances"]
   metrics_granularity = "1Minute"
-
-  # Make the first apply wait until targets are healthy, so a broken boot fails loudly.
-  min_elb_capacity          = var.asg_min
-  wait_for_capacity_timeout = "10m"
-
-  # Which recipe to use. Pinning the exact version number is what lets a rollback work.
-  launch_template {
-    id      = aws_launch_template.app.id
-    version = aws_launch_template.app.latest_version
-  }
 
   # A new launch template version (new app_version, new AMI) rolls the instances.
   # "Rolling" replaces servers gradually. Min healthy 100% / max 200% means: start the new
   # server first (up to double the normal count), and only remove an old one once it works,
   # so capacity never dips.
-  instance_refresh {
+  instance_refresh = {
     strategy = "Rolling"
-    preferences {
+    preferences = {
       min_healthy_percentage = 100
       max_healthy_percentage = 200
       instance_warmup        = 300
@@ -259,31 +265,17 @@ resource "aws_autoscaling_group" "app" {
     }
   }
 
-  tag {
-    key                 = "Name"
-    value               = var.name
-    propagate_at_launch = true
-  }
-
-  lifecycle {
-    create_before_destroy = true
-    # The scaling policy and manual changes move the desired count. Without this, the next
-    # `terraform apply` would reset it to asg_desired.
-    ignore_changes = [desired_capacity]
-  }
-}
-
-# Autoscaling rule: add servers when average CPU rises above 60%, remove them when it falls
-# well below ("target tracking" keeps the average near the target).
-resource "aws_autoscaling_policy" "cpu" {
-  name                   = "${var.name}-cpu-60"
-  autoscaling_group_name = aws_autoscaling_group.app.name
-  policy_type            = "TargetTrackingScaling"
-
-  target_tracking_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ASGAverageCPUUtilization"
+  # Autoscaling rule: add servers when average CPU rises above 60%, remove them when it
+  # falls well below ("target tracking" keeps the average near the target).
+  scaling_policies = {
+    cpu-60 = {
+      policy_type = "TargetTrackingScaling"
+      target_tracking_configuration = {
+        predefined_metric_specification = {
+          predefined_metric_type = "ASGAverageCPUUtilization"
+        }
+        target_value = 60
+      }
     }
-    target_value = 60
   }
 }

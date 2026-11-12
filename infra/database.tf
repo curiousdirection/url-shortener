@@ -1,10 +1,8 @@
 # The Postgres database (Amazon RDS), its firewall and its password.
-
-# Tells RDS which subnets it may place the database in: the two private ones.
-resource "aws_db_subnet_group" "main" {
-  name       = var.name
-  subnet_ids = aws_subnet.private[*].id
-}
+#
+# The database server uses the community module terraform-aws-modules/rds/aws. The firewall
+# and the password stay hand-written, because they are specific to this project.
+# Docs: https://registry.terraform.io/modules/terraform-aws-modules/rds/aws
 
 # A security group is a firewall attached to a resource. This one is for the database and
 # starts empty (nothing allowed in). The rule that opens it is a separate resource below.
@@ -12,7 +10,7 @@ resource "aws_security_group" "db" {
   # AWS requires unique names; `name_prefix` lets AWS add a random suffix.
   name_prefix = "${var.name}-db-"
   description = "Postgres from the app instances only"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = module.vpc.vpc_id
 
   # When this must be replaced, create the new one first, then delete the old one.
   # Otherwise the delete fails because the database is still using it.
@@ -49,25 +47,38 @@ resource "aws_ssm_parameter" "db_password" {
 }
 
 # The database server itself.
-resource "aws_db_instance" "main" {
+module "db" {
+  source  = "terraform-aws-modules/rds/aws"
+  version = "~> 7.0"
+
   identifier = var.name
   engine     = "postgres"
-  # "16" means the latest 16.x minor version.
+  # "16" means the latest 16.x minor version. `family` names the matching parameter group
+  # (Postgres settings), which the module creates for us.
   engine_version = "16"
+  family         = "postgres16"
   # The machine size, e.g. db.t4g.micro (see variables.tf).
   instance_class = var.db_instance_class
 
   db_name  = "urlshortener"
   username = "urlshortener"
-  password = random_password.db.result
+  # We bring our own password. By default this module would ask RDS to create one in
+  # Secrets Manager instead, but those rotate every 7 days by default, which would break
+  # the connection string the app reads at boot.
+  manage_master_user_password = false
+  # "Write-only": sent to AWS but not saved in the state by the database resource. Needs
+  # Terraform 1.11 or newer. Bump the version number to push a changed password.
+  password_wo         = random_password.db.result
+  password_wo_version = 1
 
   # Disk size in GiB. gp3 is general-purpose SSD storage. Encrypted at rest.
   allocated_storage = var.db_allocated_storage
   storage_type      = "gp3"
   storage_encrypted = true
 
-  # Place it in the private subnets, behind the database firewall, with no public address.
-  db_subnet_group_name   = aws_db_subnet_group.main.name
+  # Place it in the database subnets (created by the VPC module), behind the database
+  # firewall, with no public address.
+  db_subnet_group_name   = module.vpc.database_subnet_group_name
   vpc_security_group_ids = [aws_security_group.db.id]
   publicly_accessible    = false
   # Multi-AZ keeps a standby copy in another AZ for failover (costs about double).
@@ -78,9 +89,8 @@ resource "aws_db_instance" "main" {
   # When true, AWS refuses to delete the database (even `terraform destroy`) until you turn
   # it off. Off for practice, on for full scale.
   deletion_protection = var.db_deletion_protection
-  # On delete, either skip the last backup (practice) or take one named "<name>-final".
-  skip_final_snapshot       = var.db_skip_final_snapshot
-  final_snapshot_identifier = var.db_skip_final_snapshot ? null : "${var.name}-final"
+  # On delete, either skip the last backup (practice) or keep one named final-<name>-<id>.
+  skip_final_snapshot = var.db_skip_final_snapshot
 
   # Let AWS apply small Postgres updates (e.g. 16.4 -> 16.5) automatically.
   auto_minor_version_upgrade = true

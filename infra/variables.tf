@@ -79,7 +79,7 @@ variable "db_deletion_protection" {
 }
 
 variable "db_skip_final_snapshot" {
-  description = "If true, no backup is taken when the database is deleted. If false, a final snapshot named <name>-final is kept (and keeps costing money)."
+  description = "If true, no backup is taken when the database is deleted. If false, a final snapshot is kept when the database is deleted (and keeps costing money)."
   type        = bool
   default     = true
 }
