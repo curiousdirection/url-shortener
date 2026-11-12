@@ -21,32 +21,13 @@ VPC: 2 public subnets (empty for now) + 2 database subnets -> RDS Postgres 16
 
 ```bash
 cd infra
+cp terraform.tfvars.example terraform.tfvars   # optional: adjust sizes and region
 terraform init
 terraform apply
 terraform destroy
 ```
 
-After a destroy, check in the console that nothing is left (RDS snapshots in particular). The defaults skip the final snapshot and turn off deletion protection.
-
-## Changing settings
-
-Every variable in `variables.tf` has a default, so `terraform apply` works as it is. To change one, create `infra/terraform.tfvars`. It is gitignored, so it stays on your machine:
-
-```hcl
-region            = "eu-north-1"
-db_instance_class = "db.t4g.micro"
-db_multi_az       = false
-```
-
-Terraform loads `terraform.tfvars` automatically. Other ways to set a variable:
-
-- `terraform apply -var db_allocated_storage=50` on the command line.
-- An environment variable such as `TF_VAR_db_allocated_storage=50`.
-- A file with another name, passed with `-var-file=other.tfvars`.
-
-If a variable is set in several places, the later one wins: environment variables, then `terraform.tfvars`, then `-var` and `-var-file` on the command line. Run `terraform plan` first to see what a change would do. Some changes restart the database, such as a new `db_instance_class` (see `db_apply_immediately`).
-
-The free plan only covers single-AZ `db.t3.micro` and `db.t4g.micro` Postgres, so leave `db_multi_az` off and the instance class at the default there.
+Edit `terraform.tfvars` to change sizes or the region (see `variables.tf`). After a destroy, check in the console that nothing is left (RDS snapshots in particular). The defaults skip the final snapshot and turn off deletion protection.
 
 ## Cost
 
