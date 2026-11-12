@@ -1,7 +1,7 @@
 # The load balancer: the single public entry point. It accepts requests from the internet
 # and spreads them across the healthy app servers.
 #
-#   internet -> NLB (:80, and :443 if a domain is set) -> app servers (:3000)
+#   internet -> NLB (:80) -> app servers (:3000)
 #
 # NLB (Network Load Balancer) rather than ALB: at this scale almost every click is a new
 # connection, and ALB's per-capacity-unit new-connection limit (25/s) would cost ~10x more.
@@ -24,18 +24,6 @@ resource "aws_vpc_security_group_ingress_rule" "nlb_http" {
   ip_protocol       = "tcp"
   from_port         = 80
   to_port           = 80
-}
-
-# Port 443 (HTTPS) is opened only when a domain is set. `count` is 1 when TLS is on and 0
-# when off; with 0, Terraform creates nothing.
-resource "aws_vpc_security_group_ingress_rule" "nlb_https" {
-  count = local.tls_enabled ? 1 : 0
-
-  security_group_id = aws_security_group.nlb.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
 }
 
 # The load balancer may only send traffic out to the app servers, on port 3000.
@@ -98,77 +86,5 @@ resource "aws_lb_listener" "http" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app.arn
-  }
-}
-
-# Optional TLS (HTTPS) on :443. Everything below is created only when `domain_name` is set
-# (`count = 0` otherwise). TLS ends at the load balancer; traffic to the servers is plain HTTP.
-
-# Requests a free certificate for the domain from AWS Certificate Manager (ACM). ACM
-# checks you own the domain by looking for a special DNS record ("DNS validation").
-resource "aws_acm_certificate" "main" {
-  count = local.tls_enabled ? 1 : 0
-
-  domain_name       = var.domain_name
-  validation_method = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Creates that special DNS record in your Route 53 hosted zone. `for_each` makes one record
-# per validation entry ACM asks for (normally one).
-resource "aws_route53_record" "cert_validation" {
-  for_each = local.tls_enabled ? {
-    for o in aws_acm_certificate.main[0].domain_validation_options : o.domain_name => o
-  } : {}
-
-  zone_id         = var.route53_zone_id
-  name            = each.value.resource_record_name
-  type            = each.value.resource_record_type
-  records         = [each.value.resource_record_value]
-  ttl             = 60
-  allow_overwrite = true
-}
-
-# Waits until ACM has seen the DNS record and issued the certificate. Anything that needs
-# a working certificate (the HTTPS listener) refers to this, not to the certificate itself.
-resource "aws_acm_certificate_validation" "main" {
-  count = local.tls_enabled ? 1 : 0
-
-  certificate_arn         = aws_acm_certificate.main[0].arn
-  validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
-}
-
-# "Listen on port 443, decrypt with the certificate, forward to the same target group."
-resource "aws_lb_listener" "https" {
-  count = local.tls_enabled ? 1 : 0
-
-  load_balancer_arn = aws_lb.main.arn
-  protocol          = "TLS"
-  port              = 443
-  certificate_arn   = aws_acm_certificate_validation.main[0].certificate_arn
-  # Which TLS versions and ciphers to accept (TLS 1.2 and 1.3).
-  ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.app.arn
-  }
-}
-
-# Points your domain name at the load balancer (an "alias" record in Route 53).
-resource "aws_route53_record" "alias" {
-  count = local.tls_enabled ? 1 : 0
-
-  zone_id = var.route53_zone_id
-  name    = var.domain_name
-  type    = "A"
-
-  alias {
-    name                   = aws_lb.main.dns_name
-    zone_id                = aws_lb.main.zone_id
-    evaluate_target_health = true
   }
 }

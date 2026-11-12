@@ -20,25 +20,6 @@ variable "app_version" {
   type        = string
 }
 
-# Optional HTTPS. Leave both unset to serve plain HTTP on the load balancer's own address.
-variable "domain_name" {
-  description = "Optional. If set (together with route53_zone_id), the NLB also serves TLS on :443 for this name and BASE_URL becomes https://<domain_name>."
-  type        = string
-  default     = null
-}
-
-variable "route53_zone_id" {
-  description = "Hosted zone that holds domain_name. Used for ACM DNS validation and the alias record."
-  type        = string
-  default     = null
-
-  # Checked when Terraform loads the config: a domain without a zone fails with this message.
-  validation {
-    condition     = var.domain_name == null || var.route53_zone_id != null
-    error_message = "domain_name needs route53_zone_id too (used for DNS validation and the alias record)."
-  }
-}
-
 # App servers
 
 variable "instance_type" {

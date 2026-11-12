@@ -7,7 +7,7 @@ Node + TypeScript + Hono + Postgres. Short codes come from a Postgres sequence (
 ```mermaid
 flowchart LR
     client([Client])
-    nlb["Network Load Balancer<br/>:80 (:443 with a domain)"]
+    nlb["Network Load Balancer<br/>:80"]
 
     subgraph asg["Auto scaling group: 1 to N EC2 instances, each running the app"]
         subgraph app["Node app (Hono)"]

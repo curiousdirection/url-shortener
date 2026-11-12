@@ -58,10 +58,6 @@ Alternative: run migrations once before the rollout (for example through SSM on 
 aws autoscaling set-desired-capacity --auto-scaling-group-name <name> --desired-capacity 2
 ```
 
-## TLS (optional)
-
-Set `domain_name` and `route53_zone_id`. Terraform requests an ACM certificate, validates it through Route 53, adds a :443 listener and an alias record, and `BASE_URL` becomes `https://<domain_name>`.
-
 ## Tear down
 
 ```bash

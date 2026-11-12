@@ -135,10 +135,8 @@ resource "aws_vpc_security_group_egress_rule" "app_all" {
 }
 
 locals {
-  # True when a domain name was given, which turns on HTTPS (see lb.tf).
-  tls_enabled = var.domain_name != null
   # The address the app puts in the short links it returns.
-  base_url = local.tls_enabled ? "https://${var.domain_name}" : "http://${aws_lb.main.dns_name}"
+  base_url = "http://${aws_lb.main.dns_name}"
 }
 
 # A launch template is the recipe for one app server: which image, what size, which role,
