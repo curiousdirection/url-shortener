@@ -3,7 +3,7 @@
 
 # The load balancer's address, e.g. url-shortener-123.elb.eu-north-1.amazonaws.com.
 output "nlb_dns_name" {
-  value = module.nlb.dns_name
+  value = aws_lb.main.dns_name
 }
 
 output "base_url" {
@@ -13,7 +13,7 @@ output "base_url" {
 
 # The database's address and port. It is only reachable from inside the VPC.
 output "rds_endpoint" {
-  value = module.db.db_instance_endpoint
+  value = aws_db_instance.main.endpoint
 }
 
 # Where scripts/release.sh uploads the app. It reads this value to find the bucket.

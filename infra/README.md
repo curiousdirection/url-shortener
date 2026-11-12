@@ -9,12 +9,12 @@ Internet -> NLB (2 public subnets) -> Auto Scaling group of EC2 (:3000) -> RDS P
 - **NLB, not ALB:** at ~11,600 new connections/s, ALB capacity units would cost ~$2,700/month against ~$290 for the NLB.
 - **No NAT gateway, no API Gateway, no Lambda:** instances sit in public subnets with a public IP and accept only the NLB's security group.
 - **No SSH:** use SSM Session Manager.
-- **Community modules:** the network, database, load balancer and auto scaling group use [terraform-aws-modules](https://github.com/terraform-aws-modules), the way most teams do. The IAM role, security groups, S3 bucket and DB password are written by hand because they are specific to this project. Run `terraform init` after pulling to download the modules.
+- **Community module:** the network (VPC, subnets, route tables) uses [terraform-aws-modules/vpc](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws), the way most teams do. Everything else is written by hand so each piece is visible. Run `terraform init` after pulling to download the module.
 - **Local state:** it contains the DB password, so it is gitignored. A remote backend is a follow-up.
 
 ## Prerequisites
 
-- Terraform >= 1.11, AWS CLI with a profile that can create the resources (`export AWS_PROFILE=...`), Node, git.
+- Terraform >= 1.9, AWS CLI with a profile that can create the resources (`export AWS_PROFILE=...`), Node, git.
 
 ## First deploy
 

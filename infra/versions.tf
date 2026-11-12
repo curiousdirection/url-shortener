@@ -3,9 +3,8 @@
 # password in plain text, so it is gitignored. See README.md ("Local state").
 
 terraform {
-  # Refuse to run with an older Terraform than this. 1.11 is needed for the database's
-  # write-only password (see database.tf).
-  required_version = ">= 1.11"
+  # Refuse to run with an older Terraform than this.
+  required_version = ">= 1.9"
 
   # Plugins ("providers") Terraform downloads on `terraform init`. `~> 6.0` means any 6.x
   # version, but not 7.0. The exact versions used are pinned in .terraform.lock.hcl.
