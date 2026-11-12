@@ -33,7 +33,7 @@ flowchart LR
 - **Create:** a custom alias is inserted as the code. Otherwise `codeGenerator` takes the next sequence value, base62-encodes it (offset so codes are at least 6 characters) and inserts it. A unique violation on an alias returns `409`; on a generated code (it collided with an alias) the next value is tried, up to 5 times.
 - **Resolve:** `urls` is looked up by primary key `code` and the app answers with a `302` redirect, or `404`.
 
-## Run
+## Run locally
 
 ```bash
 docker compose up -d
@@ -42,6 +42,10 @@ npm install
 npm run migrate
 npm run dev
 ```
+
+## Deploy
+
+Terraform for AWS (VPC + RDS Postgres) is in [`infra/`](infra/README.md); see its README for prerequisites, apply/destroy and cost.
 
 ## API
 
