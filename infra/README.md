@@ -29,4 +29,4 @@ Sizes and region can be changed with variables (see `variables.tf`). After a des
 
 ## Cost
 
-About $0.02/hour for the database (`db.t4g.micro` plus 20 GB of storage) at `us-east-1` on-demand prices; other regions, including the default `eu-north-1`, differ. Check with the AWS Pricing Calculator. Cost alerts are account-wide, so they are not part of this Terraform; set a budget once in the AWS console.
+About $0.02/hour, roughly $14/month if left running, for the database in `eu-north-1` (Stockholm), the default region: `db.t4g.micro` Single-AZ at $0.016/hour plus 20 GB of gp3 storage at $0.12 per GB-month ($2.40/month). These are on-demand prices from the AWS Price List published 2026-11-12; check the AWS Pricing Calculator for current figures and other regions. Cost alerts are account-wide, so they are not part of this Terraform; set a budget once in the AWS console.
