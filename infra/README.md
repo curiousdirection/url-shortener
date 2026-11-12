@@ -14,7 +14,10 @@ Internet -> NLB (2 public subnets) -> Auto Scaling group of EC2 (:3000) -> RDS P
 
 ## Prerequisites
 
-- Terraform >= 1.9, AWS CLI with a profile that can create the resources (`export AWS_PROFILE=...`), Node, git.
+- [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` once in the repo; it installs the pinned version from `.terraform-version`.
+- An AWS CLI profile that can create the resources (`export AWS_PROFILE=...`).
+- Node and git, for `scripts/release.sh`.
+- The default region is `eu-north-1`. A project account is fixed to the region AWS assigned it, so check AWS Settings > Project.
 
 ## First deploy
 
@@ -84,5 +87,7 @@ Then check in the console that nothing is left (Elastic IPs, RDS snapshots, the 
 ## Cost (the figures below are on-demand `us-east-1` prices; other regions, including the default `eu-north-1`, differ. Check with the AWS Pricing Calculator)
 
 Practice, always on: about $0.07/hour, about $52/month (NLB ~$0.039/h, t4g.micro ~$0.014/h, db.t4g.micro ~$0.019/h). At 10 hours a week with `terraform destroy` in between, a few dollars a month. Cost alerts are account-wide, so they are not part of this Terraform; set a budget once in the AWS console.
+
+In `eu-north-1`, the default region, the database alone is about $0.02/hour (roughly $14/month): `db.t4g.micro` Single-AZ at $0.016/hour plus 20 GB of gp3 at $0.12 per GB-month. These figures come from the AWS Price List published 2026-11-12.
 
 Full scale: about $4,000/month (data transfer out ~$2,660, RDS ~$630, servers ~$370, NLB ~$290, IPv4 ~$40). Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,000/month.
