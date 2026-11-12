@@ -54,12 +54,6 @@ resource "aws_lb_target_group" "app" {
 
   deregistration_delay = 30
 
-  # Targets see the NLB's address, so their security group can allow the NLB's
-  # security group (rather than every client IP).
-  # Caveat: AWS documents ~55,000 connections/min per target with this off. At full
-  # scale (mostly new connections, ~2,900/s per target at peak) that must be load-tested.
-  preserve_client_ip = "false"
-
   health_check {
     protocol            = "HTTP"
     path                = "/health"
