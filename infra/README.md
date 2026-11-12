@@ -27,7 +27,14 @@ terraform apply
 terraform destroy
 ```
 
-After a destroy, check in the console that nothing is left (RDS snapshots in particular). The defaults skip the final snapshot and turn off deletion protection.
+After a destroy, check that nothing is left. Both commands should print nothing:
+
+```bash
+aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key=Project,Values=url-shortener --query 'ResourceTagMappingList[].ResourceARN' --output text
+aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
+```
+
+The first lists anything still tagged for this project. The second lists database snapshots, which a destroy can leave behind and which keep costing money. The defaults skip the final snapshot and turn off deletion protection, so there should be none. Delete a leftover with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
 
 ## Cost
 
