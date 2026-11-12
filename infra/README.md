@@ -21,12 +21,13 @@ VPC: 2 public subnets (empty for now) + 2 database subnets -> RDS Postgres 16
 
 ```bash
 cd infra
+cp terraform.tfvars.example terraform.tfvars   # optional: adjust sizes and region
 terraform init
 terraform apply
 terraform destroy
 ```
 
-Sizes and region can be changed with variables (see `variables.tf`). After a destroy, check in the console that nothing is left (RDS snapshots in particular). The defaults skip the final snapshot and turn off deletion protection.
+After a destroy, check in the console that nothing is left (RDS snapshots in particular). The defaults skip the final snapshot and turn off deletion protection.
 
 ## Cost
 
