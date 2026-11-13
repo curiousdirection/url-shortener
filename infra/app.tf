@@ -2,7 +2,7 @@
 #
 # Express Mode creates the rest: the ECS cluster ("default"), task definition, an
 # internet-facing load balancer with HTTPS and a certificate, target group, its own security
-# groups and CPU autoscaling. It tags what it creates AmazonECSManaged=true.
+# groups and CPU autoscaling. It marks what it manages with the tag AmazonECSManaged=true.
 #   https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html
 
 resource "aws_ecr_repository" "app" {
@@ -111,8 +111,7 @@ resource "aws_ecs_express_gateway_service" "app" {
   execution_role_arn      = aws_iam_role.execution.arn
   infrastructure_role_arn = aws_iam_role.infrastructure.arn
 
-  # Graviton: cheaper than x86. release.sh builds the image for the same architecture.
-  cpu_architecture  = "ARM64"
+  cpu_architecture  = var.cpu_architecture
   cpu               = tostring(var.task_cpu)
   memory            = tostring(var.task_memory)
   health_check_path = "/health"
@@ -139,23 +138,11 @@ resource "aws_ecs_express_gateway_service" "app" {
       log_group = aws_cloudwatch_log_group.app.name
     }
 
-    # pg reads these itself; see src/db.ts. verify-full checks the server certificate and its
-    # name against the RDS CA bundle in the image.
+    # pg reads PGPASSWORD itself (see src/db.ts). verify-full checks the server certificate and
+    # its name against the RDS CA bundle in the image.
     environment {
-      name  = "PGHOST"
-      value = aws_db_instance.main.address
-    }
-    environment {
-      name  = "PGUSER"
-      value = aws_db_instance.main.username
-    }
-    environment {
-      name  = "PGDATABASE"
-      value = aws_db_instance.main.db_name
-    }
-    environment {
-      name  = "PGSSLMODE"
-      value = "verify-full"
+      name  = "DATABASE_URL"
+      value = "postgres://${aws_db_instance.main.username}@${aws_db_instance.main.address}:5432/${aws_db_instance.main.db_name}?sslmode=verify-full"
     }
     secret {
       name       = "PGPASSWORD"

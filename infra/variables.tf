@@ -20,6 +20,17 @@ variable "app_version" {
   type        = string
 }
 
+variable "cpu_architecture" {
+  description = "ARM64 (Graviton, cheaper) or X86_64. scripts/release.sh builds the image for the same one."
+  type        = string
+  default     = "ARM64"
+
+  validation {
+    condition     = contains(["ARM64", "X86_64"], var.cpu_architecture)
+    error_message = "cpu_architecture must be ARM64 or X86_64."
+  }
+}
+
 variable "task_cpu" {
   description = "CPU units per task: 256, 512, 1024, 2048 or 4096 (1024 = 1 vCPU). Must pair with a valid task_memory."
   type        = number

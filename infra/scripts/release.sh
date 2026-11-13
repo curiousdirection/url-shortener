@@ -12,11 +12,14 @@ fi
 VERSION="$(git rev-parse --short HEAD)"
 tf=(terraform -chdir=infra)
 
-# The repository has to exist before the first push, and the service needs the image. So
-# create just the repository now (a no-op after the first time); the full apply is last.
-"${tf[@]}" apply -auto-approve -target=aws_ecr_repository.app -var "app_version=$VERSION"
-
-REPO="$("${tf[@]}" output -raw ecr_repository_url)" # <account>.dkr.ecr.<region>.amazonaws.com/<name>
+# The repository has to exist before the first push, and the service needs the image. So on
+# the first release create just the repository; the full apply is last.
+REPO="$("${tf[@]}" output -raw ecr_repository_url 2>/dev/null || true)"
+if [ -z "$REPO" ]; then
+  "${tf[@]}" apply -auto-approve -target=aws_ecr_repository.app -var "app_version=$VERSION"
+  REPO="$("${tf[@]}" output -raw ecr_repository_url)"
+fi
+# <account>.dkr.ecr.<region>.amazonaws.com/<name>
 REGISTRY="${REPO%%/*}"
 REGION="$(cut -d. -f4 <<<"$REGISTRY")"
 
@@ -25,8 +28,13 @@ if aws ecr describe-images --region "$REGION" --repository-name "${REPO#*/}" --i
   echo "Image $VERSION is already in ECR."
 else
   aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
-  # --platform must match cpu_architecture in app.tf.
-  docker build --platform linux/arm64 --build-arg NODE_VERSION="$(cat .node-version)" -t "$REPO:$VERSION" .
+  # Read from the config, not the state, so it is right even before the next apply.
+  case "$(echo var.cpu_architecture | "${tf[@]}" console -var "app_version=$VERSION" | tr -d '"')" in
+    ARM64) PLATFORM=linux/arm64 ;;
+    X86_64) PLATFORM=linux/amd64 ;;
+    *) echo "Unknown cpu_architecture" >&2; exit 1 ;;
+  esac
+  docker build --platform "$PLATFORM" --build-arg NODE_VERSION="$(cat .node-version)" -t "$REPO:$VERSION" .
   docker push "$REPO:$VERSION"
 fi
 

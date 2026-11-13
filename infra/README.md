@@ -31,7 +31,7 @@ terraform init
 ./scripts/release.sh
 ```
 
-`release.sh` tags the image with the git short SHA, so it refuses to run with uncommitted changes. It creates the image repository (the service needs an image, so the repository has to exist first), builds and pushes the image, then runs `terraform apply -var app_version=<sha>` for you to confirm. The first apply takes about 15 minutes (the database, then the service); it waits for the service and fails if the deployment does.
+`release.sh` tags the image with the git short SHA, so it refuses to run with uncommitted changes. On the first release it creates the image repository (the service needs an image, so the repository has to exist first). It then builds and pushes the image, and runs `terraform apply -var app_version=<sha>` for you to confirm. A release takes roughly 10 to 15 minutes, because `terraform apply` waits for the canary deployment to finish and fails if the deployment does. The first apply also creates the database, so it takes longer.
 
 ```bash
 curl $(terraform output -raw base_url)/health
@@ -43,7 +43,7 @@ Tasks run the migrations on startup, so a release is one step; see [docs/decisio
 
 ## Rollback
 
-Express Mode deploys a canary: it starts the new tasks beside the old ones, checks their health, sends them 5% of traffic, and rolls back by itself if the 4xx/5xx rate goes above 1%. The old tasks keep serving throughout, and `terraform apply` fails with the deployment's error. After a failed deploy, or to go back to an older release, apply the last good tag:
+Express Mode deploys a canary: it starts the new tasks beside the old ones, checks their health, sends them 5% of traffic, and rolls back by itself if an alarm it manages goes off. The old tasks keep serving throughout, and `terraform apply` fails with the deployment's error. The alarm counts 4xx as well as 5xx responses ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)) and cannot be changed through the Express Mode API or Terraform, so a burst of normal 4xx (unknown codes, taken aliases) during a canary could roll back a healthy release. After a failed deploy, or to go back to an older release, apply the last good tag:
 
 ```bash
 terraform apply -var app_version=<last good sha>
@@ -67,7 +67,7 @@ aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key
 aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first lists anything tagged for this project. The second lists everything Express Mode created in the region (it tags all of it `AmazonECSManaged`), in case it does not copy our tag; it also shows any other Express Mode service in the account. Both update slowly and can show deleted resources for a few hours: if `terraform state list` prints nothing and a direct lookup (e.g. `aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener`, or `aws elbv2 describe-load-balancers --region eu-north-1` for the load balancer) returns not found, those ARNs are stale and cost nothing. The third lists every manual snapshot in the account; only `url-shortener-final-*` ones come from this stack, and keep costing money. The practice defaults skip the final snapshot and turn off deletion protection, so there should be none; full-scale values do the opposite, so there the third command will show the final snapshot until you delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
+The first lists anything tagged for this project. Express Mode copies the service's tags to its tasks and autoscaling target, and its docs do not say whether the load balancer (which up to 25 Express Mode services in a VPC share) gets them. So the second lists everything tagged `AmazonECSManaged`, the tag Express Mode marks what it manages with, in case the load balancer lacks ours; it also shows any other Express Mode service in the account. Both update slowly and can show deleted resources for a few hours: if `terraform state list` prints nothing and a direct lookup (e.g. `aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener`, or `aws elbv2 describe-load-balancers --region eu-north-1` for the load balancer) returns not found, those ARNs are stale and cost nothing. The third lists every manual snapshot in the account; only `url-shortener-final-*` ones come from this stack, and keep costing money. The practice defaults skip the final snapshot and turn off deletion protection, so there should be none; full-scale values do the opposite, so there the third command will show the final snapshot until you delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
 
 If Express Mode left something in the VPC (a security group or network interface), the VPC delete fails and says so.
 
