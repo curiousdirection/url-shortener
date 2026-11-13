@@ -1,0 +1,14 @@
+# Full-scale sizing for the load in "Assumptions" (root README.md). Reference only, not meant
+# to be applied; see "Cost" in README.md.
+task_cpu    = 2048
+task_memory = 4096
+min_tasks   = 4
+max_tasks   = 12
+
+db_instance_class        = "db.r7g.large"
+db_allocated_storage     = 300
+db_multi_az              = true
+db_backup_retention_days = 7
+db_deletion_protection   = true
+db_apply_immediately     = false
+db_skip_final_snapshot   = false

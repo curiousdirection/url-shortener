@@ -7,29 +7,34 @@ Node + TypeScript + Hono + Postgres. Short codes come from a Postgres sequence (
 ```mermaid
 flowchart LR
     client([Client])
+    alb["Application Load Balancer<br/>HTTPS, GET /health"]
 
-    subgraph app["Node app (Hono)"]
-        routes["app.ts<br/>routes + zod validation"]
-        service["urlService.ts<br/>create / resolve"]
-        gen["codeGenerator.ts<br/>nextval + base62"]
-        routes --> service
-        service -->|"no alias"| gen
+    subgraph app["Fargate tasks: 1 to N, each running the app"]
+        subgraph node["Node app (Hono)"]
+            routes["app.ts<br/>routes + zod validation"]
+            service["urlService.ts<br/>create / resolve"]
+            gen["codeGenerator.ts<br/>nextval + base62"]
+            routes --> service
+            service -->|"no alias"| gen
+        end
     end
 
-    subgraph pg["Postgres"]
+    subgraph pg["Postgres (RDS, private subnets)"]
         urls[("urls<br/>code PK, long_url")]
         seq[["url_code_seq"]]
     end
 
-    client -->|"POST /api/urls"| routes
-    client -->|"GET /:code"| routes
-    routes -.->|"201 / 409"| client
-    routes -.->|"302 / 404"| client
+    client -->|"POST /api/urls"| alb
+    client -->|"GET /:code"| alb
+    alb -->|":3000, only healthy tasks"| routes
+    routes -.->|"201 / 409 / 302 / 404"| alb
+    alb -.-> client
 
     service -->|"INSERT / SELECT"| urls
     gen -->|"nextval()"| seq
 ```
 
+- **Deployed:** requests go through an Application Load Balancer to whichever tasks pass the health check. All tasks share one Postgres (RDS). Locally (see Run locally) it is just one app process and one Postgres. Details in [infra/README.md](infra/README.md).
 - **Create:** a custom alias is inserted as the code. Otherwise `codeGenerator` takes the next sequence value, base62-encodes it (offset so codes are at least 6 characters) and inserts it. A unique violation on an alias returns `409`; on a generated code (it collided with an alias) the next value is tried, up to 5 times.
 - **Resolve:** `urls` is looked up by primary key `code` and the app answers with a `302` redirect, or `404`.
 
@@ -45,11 +50,11 @@ npm run dev
 
 ## Deploy
 
-Terraform for AWS (VPC + RDS Postgres) is in [`infra/`](infra/README.md); see its README for prerequisites, apply/destroy and cost.
+The `Dockerfile` builds the app image. Terraform in [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode (Fargate behind an Application Load Balancer) and RDS Postgres; see its README for prerequisites, deploying, rollback, teardown and cost.
 
 ## API
 
-- `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `400` on invalid input, `409` if the alias is taken.
+- `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `shortUrl` starts with `BASE_URL` if that is set, otherwise with the address the request came in on. `400` on invalid input, `409` if the alias is taken.
 - `GET /:code` redirects (302) to the original URL, or `404`.
 - `GET /health`
 
