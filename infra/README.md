@@ -34,7 +34,7 @@ terraform init
 `release.sh` tags the image with the git short SHA, so it refuses to run with uncommitted changes. On the first release it creates the image repository (the service needs an image, so the repository has to exist first). It then builds and pushes the image, and runs `terraform apply -var app_version=<sha>` for you to confirm. A release takes roughly 10 to 15 minutes, because `terraform apply` waits for the canary deployment to finish and fails if the deployment does. The first apply also creates the database, so it takes longer.
 
 ```bash
-curl $(terraform output -raw base_url)/health
+curl $(terraform output -raw url)/health
 ```
 
 To release a change, commit and run `./scripts/release.sh` again. To change only settings, run `terraform apply -var app_version=<tag now running>`: `app_version` has no default, so every apply and destroy needs it.
@@ -86,6 +86,6 @@ Full scale: about $6,500/month. Data transfer out ~$2,660, the ALB ~$2,730, RDS 
 - **Tasks:** 7 tasks of 2 vCPU / 4 GB on Graviton (the ~7 `c7g.large` servers the load needs), $0.079/hour each.
 - **Data transfer out, RDS and IPv4** are estimates that do not depend on the load balancer. Traffic between the ALB and tasks in other zones is not billed.
 
-An NLB with EC2 servers would cost about $2,100/month less at full scale; that is the known trade-off for fewer parts to run.
+An NLB with EC2 servers would cost about $2,100/month less at full scale; that is the known trade-off for fewer parts to run (why we accepted that: [ADR 0002](../docs/decisions/0002-deploy-with-ecs-express-mode.md)).
 
 Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,000/month.

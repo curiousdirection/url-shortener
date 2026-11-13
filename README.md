@@ -54,7 +54,7 @@ The `Dockerfile` builds the app image. Terraform in [`infra/`](infra/README.md) 
 
 ## API
 
-- `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `shortUrl` starts with `BASE_URL` if that is set, otherwise with the address the request came in on. `400` on invalid input, `409` if the alias is taken.
+- `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `shortUrl` uses the address the request was sent to. `400` on invalid input, `409` if the alias is taken.
 - `GET /:code` redirects (302) to the original URL, or `404`.
 - `GET /health`
 

@@ -12,17 +12,12 @@ const create = (app: ReturnType<typeof buildApp>, url: string, headers: Record<s
   });
 
 describe("shortUrl", () => {
-  it("uses the configured base URL when there is one", async () => {
-    const res = await create(buildApp(service, "https://go.example"), "http://ignored.test/api/urls");
-    expect((await res.json()).shortUrl).toBe("https://go.example/abc123");
-  });
-
-  it("without a base URL, uses the request's host", async () => {
+  it("uses the request's host", async () => {
     const res = await create(buildApp(service), "http://localhost:3000/api/urls");
     expect((await res.json()).shortUrl).toBe("http://localhost:3000/abc123");
   });
 
-  it("without a base URL, uses https when the load balancer says the client did", async () => {
+  it("uses https when the load balancer says the client did", async () => {
     const res = await create(buildApp(service), "http://app.example.com/api/urls", {
       "x-forwarded-proto": "https",
     });
