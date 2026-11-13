@@ -9,8 +9,12 @@ data "aws_caller_identity" "current" {}
 # AWS publishes the id of the newest Amazon Linux 2023 (Arm) image as a public parameter.
 # Reading it means new servers always start from a current, patched image. (A new image
 # changes the launch template and rolls the servers on your next apply.)
-# The image id is public, not a secret. The launch template reads `insecure_value` because
-# plain `value` is always hidden in plan output, which would hide an image change.
+#
+# The launch template below reads `insecure_value`, not `value`. Both hold the same image id.
+# The difference is only in what `terraform plan` shows: Terraform assumes a parameter
+# could be a password, so it prints `value` as "(sensitive value)". This parameter is a
+# public image id, so there is nothing to hide, and with `insecure_value` the plan shows the
+# old and new ids when AWS publishes a new image (the change that replaces every server).
 data "aws_ssm_parameter" "al2023_arm64" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 }
