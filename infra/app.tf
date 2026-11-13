@@ -2,7 +2,7 @@
 #
 # Express Mode creates the rest: the ECS cluster ("default"), task definition, an
 # internet-facing load balancer with HTTPS and a certificate, target group, its own security
-# groups and CPU autoscaling. It marks what it manages with the tag AmazonECSManaged=true.
+# groups and CPU autoscaling.
 #   https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html
 
 resource "aws_ecr_repository" "app" {

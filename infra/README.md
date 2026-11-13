@@ -59,15 +59,14 @@ terraform destroy -var app_version=none
 
 Nothing is deployed on the way down, so any `app_version` works. The images go with the repository. Express Mode deletes what it created (the ALB, target group, certificate, its security groups, autoscaling and alarms), and Terraform deletes everything else.
 
-After a destroy, check that nothing is left. All three commands should print nothing:
+After a destroy, check that nothing is left. Both commands should print nothing:
 
 ```bash
 aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key=Project,Values=url-shortener --query 'ResourceTagMappingList[].ResourceARN' --output text
-aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key=AmazonECSManaged,Values=true --query 'ResourceTagMappingList[].ResourceARN' --output text
 aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first lists anything tagged for this project. Express Mode copies the service's tags to its tasks and autoscaling target, and its docs do not say whether the load balancer (which up to 25 Express Mode services in a VPC share) gets them. So the second lists everything tagged `AmazonECSManaged`, the tag Express Mode marks what it manages with, in case the load balancer lacks ours; it also shows any other Express Mode service in the account. Both update slowly and can show deleted resources for a few hours: if `terraform state list` prints nothing and a direct lookup (e.g. `aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener`, or `aws elbv2 describe-load-balancers --region eu-north-1` for the load balancer) returns not found, those ARNs are stale and cost nothing. The third lists every manual snapshot in the account; only `url-shortener-final-*` ones come from this stack, and keep costing money. The practice defaults skip the final snapshot and turn off deletion protection, so there should be none; full-scale values do the opposite, so there the third command will show the final snapshot until you delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
+The first lists anything tagged for this project. It updates slowly and can show deleted resources for a few hours: if `terraform state list` prints nothing and a direct lookup (e.g. `aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener`, or `aws elbv2 describe-load-balancers --region eu-north-1` for the load balancer) returns not found, those ARNs are stale and cost nothing. The second lists every manual snapshot in the account; only `url-shortener-final-*` ones come from this stack, and keep costing money. The practice defaults skip the final snapshot and turn off deletion protection, so there should be none; full-scale values do the opposite, so there the second command will show the final snapshot until you delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
 
 If Express Mode left something in the VPC (a security group or network interface), the VPC delete fails and says so.
 
