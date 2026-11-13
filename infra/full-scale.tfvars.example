@@ -1,5 +1,5 @@
-# Full-scale sizing: 1B stored URLs, ~35k redirects/s at peak. Reference only, not meant to be applied
-# (about $4,300/month). Same structure as practice; only these values differ.
+# Full-scale sizing for the load in "Assumptions" (root README.md). Reference only, not meant
+# to be applied; see "Cost" in README.md.
 instance_type = "c7g.large"
 asg_min       = 2
 asg_max       = 12

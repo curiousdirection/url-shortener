@@ -3,8 +3,7 @@
 #
 #   internet -> NLB (:80) -> app servers (:3000)
 #
-# NLB (Network Load Balancer) rather than ALB (Application Load Balancer): at this scale almost every click is a new
-# connection, and ALB's per-capacity-unit new-connection limit (25/s) would cost ~10x more.
+# NLB (Network Load Balancer) rather than ALB: see "NLB, not ALB" in README.md.
 
 # Firewall for the load balancer: the internet may connect on port 80...
 resource "aws_security_group" "nlb" {
@@ -43,8 +42,7 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.nlb.id]
 
   # Let each load balancer node send traffic to servers in either AZ, so the load stays
-  # even if the servers are unevenly spread. Cost: traffic that crosses between AZs is billed
-  # as inter-AZ data transfer (see "Cost" in README.md).
+  # even if the servers are unevenly spread (this has a cost, see "Cost" in README.md).
   enable_cross_zone_load_balancing = true
 }
 

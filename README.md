@@ -50,7 +50,7 @@ npm run dev
 
 ## Deploy
 
-Terraform for AWS (VPC + RDS Postgres) is in [`infra/`](infra/README.md); see its README for prerequisites, apply/destroy and cost.
+Terraform for AWS (NLB, auto scaling group of EC2 instances, RDS Postgres) is in [`infra/`](infra/README.md); see its README for prerequisites, deploying, releasing and cost.
 
 ## API
 
@@ -81,10 +81,6 @@ docker compose up -d
 npm run migrate:test
 npm test
 ```
-
-## Deploy to AWS
-
-`infra/` has Terraform for an NLB, an auto scaling group of EC2 instances and RDS Postgres. See [infra/README.md](infra/README.md). In production `PORT`, `BASE_URL` and `DATABASE_URL` come from there, not from `.env`.
 
 ## Assumptions
 

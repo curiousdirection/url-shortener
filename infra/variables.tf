@@ -13,10 +13,8 @@ variable "region" {
   default     = "eu-north-1"
 }
 
-# No default on purpose: you must pass it on every `terraform apply`, so a plain apply
-# can't point the servers at a release that doesn't exist.
 variable "app_version" {
-  description = "Release id (git short sha) uploaded by scripts/release.sh. Changing it replaces the instances. No default: pass it on every apply."
+  description = "Release id (git short sha) uploaded by scripts/release.sh. Changing it replaces the instances. No default on purpose, so a plain apply can't point the servers at a release that doesn't exist."
   type        = string
 }
 
@@ -27,7 +25,6 @@ variable "instance_type" {
   type        = string
   default     = "t4g.micro"
 
-  # The image and boot script are Arm-only, so an x86 type (t3, c7i, ...) would fail at boot.
   # Graviton types have a "g" after the generation number (t4g, c7g, c7gn, m6gd, ...).
   validation {
     condition     = can(regex("^[a-z]+[0-9]+g[a-z]*\\.", var.instance_type))

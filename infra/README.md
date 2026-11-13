@@ -101,4 +101,4 @@ In `eu-north-1`, the default region, the database alone is about $0.02/hour (rou
 
 Full scale: about $4,300/month (data transfer out ~$2,660, RDS ~$630, servers ~$370, NLB ~$290, cross-zone traffic ~$300, IPv4 ~$40).
 
-The cross-zone figure is approximate. The NLB has cross-zone load balancing on, so about half of the responses (with 2 AZs and evenly spread servers) go from a server in one AZ to a load balancer node in the other. AWS bills inter-AZ traffic at $0.01/GB at each end, $0.02/GB in all. Half of the ~30 TB/month behind the data-transfer-out figure is ~15 TB, about $300/month; the small request side adds little. Practice size pays cents. Turning cross-zone off removes this cost but then each AZ's servers only get that AZ's share of the load. Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,000/month.
+Cross-zone traffic is an estimate: with 2 AZs about half of the ~30 TB/month of responses crosses AZs, at $0.02/GB (inter-AZ, both ends). Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,000/month.

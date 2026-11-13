@@ -152,8 +152,9 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
 }
 
 locals {
-  # The provider's default_tags don't reach instances and disks launched by the auto scaling
-  # group, so the launch template tags them itself (used in billing reports).
+  # The provider's default_tags don't reach the auto scaling group or the instances and disks
+  # it launches, so the group and the launch template set these themselves (used in billing
+  # reports and in the leftover check in README.md, "Tear down").
   launch_tags = { Project = var.name, ManagedBy = "terraform" }
 
   # The address the app puts in the short links it returns.
@@ -281,6 +282,16 @@ resource "aws_autoscaling_group" "app" {
       instance_warmup        = 300
       # Roll back to the previous launch template version if a release never gets healthy.
       auto_rollback = true
+    }
+  }
+
+  # Tags on the group itself. Not propagated: the launch template tags the instances.
+  dynamic "tag" {
+    for_each = merge(local.launch_tags, { Name = var.name })
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = false
     }
   }
 
