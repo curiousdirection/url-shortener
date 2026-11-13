@@ -41,9 +41,10 @@ resource "aws_lb" "main" {
   subnets            = module.vpc.public_subnets
   security_groups    = [aws_security_group.nlb.id]
 
-  # Let each load balancer node send traffic to servers in either AZ, so the load stays
-  # even if the servers are unevenly spread. Traffic that crosses AZs is billed; with this
-  # off, there is no such charge (see "Cost" in README.md).
+  # Let each load balancer node send traffic to servers in either AZ (off by default for an
+  # NLB). Without it, the node in an AZ with no server fails its requests, which happens at
+  # practice size: 1 server, 2 AZs. It also keeps the load even when the servers are unevenly
+  # spread. Traffic that crosses AZs is billed (see "Cost" in README.md).
   enable_cross_zone_load_balancing = true
 }
 
