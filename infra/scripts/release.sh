@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the app, upload it to the release bucket, and print the apply command.
+# Build the app and upload it to the release bucket. Next steps: "Releasing" in infra/README.md.
 # Usage: infra/scripts/release.sh   (run from anywhere; needs AWS credentials)
 set -euo pipefail
 
@@ -12,8 +12,7 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 VERSION="$(git rev-parse --short HEAD)"
 
-# $ROOT is an absolute path, so this and the commands printed below work from any directory.
-BUCKET="${RELEASE_BUCKET:-$(terraform -chdir="$ROOT/infra" output -raw release_bucket)}"
+BUCKET="${RELEASE_BUCKET:-$(terraform -chdir=infra output -raw release_bucket)}"
 
 npm ci
 rm -rf dist # no stale compiled files in the release
@@ -23,9 +22,4 @@ TARBALL="$(mktemp -d)/url-shortener-$VERSION.tgz"
 tar -czf "$TARBALL" dist migrations package.json package-lock.json .node-version
 aws s3 cp "$TARBALL" "s3://$BUCKET/releases/"
 
-echo
-echo "Uploaded release $VERSION. Deploy it with:"
-echo "  terraform -chdir=\"$ROOT/infra\" apply -var app_version=$VERSION"
-echo
-echo "Terraform does not wait for the rolling replacement to finish. Watch it with:"
-echo "  aws autoscaling describe-instance-refreshes --auto-scaling-group-name \$(terraform -chdir=\"$ROOT/infra\" output -raw asg_name)"
+echo "Uploaded release $VERSION."

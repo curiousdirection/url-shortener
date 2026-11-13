@@ -26,8 +26,8 @@ cd infra
 cp terraform.tfvars.example terraform.tfvars   # optional: adjust sizes and region
 terraform init
 terraform apply -target=aws_s3_bucket.releases -var app_version=none   # the bucket must exist before the first release
-./scripts/release.sh                             # prints the next command (works from any directory)
-terraform apply -var app_version=<printed version>
+./scripts/release.sh                             # prints the release version
+terraform apply -var app_version=<that version>
 ```
 
 Then:
@@ -40,7 +40,7 @@ The first apply waits up to 10 minutes for the targets to become healthy. If it 
 
 ## Releasing
 
-Commit, run `infra/scripts/release.sh` (from any directory), then run the `terraform apply -var app_version=...` it prints. The printed commands use `terraform -chdir=` with the absolute path to `infra/`, so they work from any directory too. `app_version` has no default, so pass it on every apply (use the version currently deployed when changing other settings). The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
+Commit, run `infra/scripts/release.sh` (from any directory), then in `infra/` run `terraform apply -var app_version=<the version it printed>`. `app_version` has no default, so pass it on every apply (use the version currently deployed when changing other settings). The new `app_version` changes the launch template, so the ASG replaces instances one at a time without dropping capacity. A new Amazon Linux AMI also triggers a refresh on the next apply.
 
 `terraform apply` does not wait for the rolling replacement to finish, so a successful apply does not mean the release is healthy. Watch it with:
 
