@@ -28,13 +28,8 @@ if aws ecr describe-images --region "$REGION" --repository-name "${REPO#*/}" --i
   echo "Image $VERSION is already in ECR."
 else
   aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
-  # Read from the config, not the state, so it is right even before the next apply.
-  case "$(echo var.cpu_architecture | "${tf[@]}" console -var "app_version=$VERSION" | tr -d '"')" in
-    ARM64) PLATFORM=linux/arm64 ;;
-    X86_64) PLATFORM=linux/amd64 ;;
-    *) echo "Unknown cpu_architecture" >&2; exit 1 ;;
-  esac
-  docker build --platform "$PLATFORM" --build-arg NODE_VERSION="$(cat .node-version)" -t "$REPO:$VERSION" .
+  # Arm, to match cpu_architecture in infra/app.tf (slower on an x86 machine, which emulates it).
+  docker build --platform linux/arm64 --build-arg NODE_VERSION="$(cat .node-version)" -t "$REPO:$VERSION" .
   docker push "$REPO:$VERSION"
 fi
 

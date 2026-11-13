@@ -111,7 +111,8 @@ resource "aws_ecs_express_gateway_service" "app" {
   execution_role_arn      = aws_iam_role.execution.arn
   infrastructure_role_arn = aws_iam_role.infrastructure.arn
 
-  cpu_architecture  = var.cpu_architecture
+  # Graviton (Arm): cheaper than x86. scripts/release.sh builds the image for linux/arm64.
+  cpu_architecture  = "ARM64"
   cpu               = tostring(var.task_cpu)
   memory            = tostring(var.task_memory)
   health_check_path = "/health"
