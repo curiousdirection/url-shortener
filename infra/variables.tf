@@ -44,6 +44,12 @@ variable "max_tasks" {
   default     = 2
 }
 
+variable "alarm_email" {
+  description = "Email address the alarms in alarms.tf notify. Unset: the alarms still show in the CloudWatch console but email no one."
+  type        = string
+  default     = null
+}
+
 # Database
 
 variable "db_instance_class" {

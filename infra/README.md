@@ -35,6 +35,16 @@ Run `release.sh` again for any later change, code or settings. Each task runs th
 
 If the first deploy fails with "Unable to assume the service linked role", ECS has just created that role for the account: run `release.sh` again a minute later.
 
+## Alerts
+
+Put `alarm_email = "you@example.com"` in `infra/terraform.tfvars` and run `release.sh`; then click the link in AWS's confirmation email. Three alarms email you (and again when they clear):
+
+- the app answers more than 5% of requests with a 5xx for 10 minutes;
+- the load balancer answers 5xx itself, usually because no task is healthy;
+- the database has less than 10% of its disk free.
+
+App logs (startup, migrations, errors) are in CloudWatch Logs under `/url-shortener/app` for 7 days.
+
 ## Rollback
 
 A release first gets 5% of traffic and rolls back by itself if its error alarm fires; `terraform apply` then fails. The alarm counts 4xx as well as 5xx ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)), so normal 404s could roll back a good release. To go back to an earlier release:
@@ -64,7 +74,7 @@ The first can still list deleted resources for a few hours; if `terraform state 
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $50/month if left running: load balancer ~$17, one small task ~$8, database ~$14 including 20 GB of storage, public IPv4 ~$11. Destroy between sessions and it's a few dollars a month. Set a budget alert in the AWS console.
+- **Practice:** about $50/month if left running: load balancer ~$17, one small task ~$8, database ~$14 including 20 GB of storage, public IPv4 ~$11. Destroy between sessions and it's a few dollars a month. Alarms add about $0.40. Set a budget alert in the AWS console.
 - **Full scale:** about $6,200/month: data transfer out ~$2,650, load balancer ~$2,590 (it bills by new connections per second, and nearly every redirect is one), tasks ~$440, RDS ~$430 (Multi-AZ instance and 300 GB), IPv4 ~$40. An NLB with EC2 servers would cost roughly $2,100 less, for more parts to run ([ADR 0002](../docs/decisions/0002-deploy-with-ecs-express-mode.md)).
 
 Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,300/month.
