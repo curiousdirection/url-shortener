@@ -1,6 +1,6 @@
 # Deploying to AWS
 
-Terraform for the app on [Amazon ECS Express Mode](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-overview.html), plus a VPC and an RDS Postgres database. The same Terraform serves practice and full scale; only variable values differ (`terraform.tfvars.example` vs `full-scale.tfvars.example`).
+Terraform for the app on [Amazon ECS Express Mode](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-overview.html), plus a VPC and an RDS Postgres database. The same Terraform serves practice and full scale; only variable values differ (the defaults in `variables.tf` vs `full-scale.tfvars.example`).
 
 ```
 Internet -> ALB (HTTPS) -> Fargate tasks (:3000, 2 public subnets) -> RDS Postgres 16 (private subnets)
@@ -26,10 +26,11 @@ Commit your changes, then:
 
 ```bash
 cd infra
-cp terraform.tfvars.example terraform.tfvars   # optional: adjust sizes and region
 terraform init
 ./scripts/release.sh
 ```
+
+The defaults in `variables.tf` are the practice sizes. To change a setting such as `region`, put it in `infra/terraform.tfvars` (gitignored) or pass `-var`.
 
 `release.sh` tags the image with the git short SHA, so it refuses to run with uncommitted changes. On the first release it creates the image repository (the service needs an image, so the repository has to exist first). It then builds and pushes the image, and runs `terraform apply -var app_version=<sha>` for you to confirm. A release takes roughly 10 to 15 minutes, because `terraform apply` waits for the canary deployment to finish and fails if the deployment does. The first apply also creates the database, so it takes longer.
 

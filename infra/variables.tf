@@ -1,5 +1,5 @@
-# Inputs you can change. Every variable with a `default` is optional. To override one,
-# put it in terraform.tfvars (copy terraform.tfvars.example) or pass `-var name=value`.
+# Inputs you can change. The defaults are the practice values. To override one, put it in
+# terraform.tfvars (gitignored) or pass `-var name=value`.
 
 variable "name" {
   description = "Prefix for resource names and tags."
