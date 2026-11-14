@@ -50,7 +50,7 @@ npm run dev
 
 ## Deploy
 
-The `Dockerfile` builds the app image, and [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode and RDS Postgres.
+The `Dockerfile` builds the app image, and [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode and RDS Postgres. A push to `main` that changes the app is tested, built and deployed by GitHub Actions (`.github/workflows/deploy.yml`). The one-time setup, the manual first run and rollback are in [`infra/README.md`](infra/README.md).
 
 ## API
 

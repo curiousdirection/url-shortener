@@ -1,5 +1,6 @@
 # check=skip=InvalidDefaultArgInFrom
-# Built by infra/scripts/release.sh, which passes NODE_VERSION from .node-version.
+# Built by infra/scripts/release.sh and .github/workflows/deploy.yml, which pass NODE_VERSION
+# from .node-version.
 ARG NODE_VERSION
 
 FROM node:${NODE_VERSION}-slim AS build
