@@ -34,7 +34,7 @@ flowchart LR
     gen -->|"nextval()"| seq
 ```
 
-- **Deployed:** requests go through an Application Load Balancer to whichever tasks pass the health check. All tasks share one Postgres (RDS). Locally (see Run locally) it is just one app process and one Postgres. Details in [infra/README.md](infra/README.md).
+- **Deployed:** a load balancer sends requests to whichever tasks pass the health check, and all tasks share one Postgres. Locally it's one process and one Postgres.
 - **Create:** a custom alias is inserted as the code. Otherwise `codeGenerator` takes the next sequence value, base62-encodes it (offset so codes are at least 6 characters) and inserts it. A unique violation on an alias returns `409`; on a generated code (it collided with an alias) the next value is tried, up to 5 times.
 - **Resolve:** `urls` is looked up by primary key `code` and the app answers with a `302` redirect, or `404`.
 
@@ -50,7 +50,7 @@ npm run dev
 
 ## Deploy
 
-The `Dockerfile` builds the app image. Terraform in [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode (Fargate behind an Application Load Balancer) and RDS Postgres; see its README for prerequisites, deploying, rollback, teardown and cost.
+The `Dockerfile` builds the app image, and [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode and RDS Postgres.
 
 ## API
 
