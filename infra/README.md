@@ -17,7 +17,7 @@ Internet -> ALB (HTTPS) -> Fargate tasks (:3000, 2 public subnets) -> RDS Postgr
 - [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` once in the repo; it installs the pinned version from `.terraform-version`.
 - An AWS CLI profile that can create the resources (`export AWS_PROFILE=...`).
 - Docker and git, for `scripts/release.sh`.
-- ECS's service-linked role (`AWSServiceRoleForECS`). ECS normally creates it on first use, but a new account can lack it, and the first deploy then fails with "Unable to assume the service linked role". Create it once: `aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com`.
+- In an account that has never used ECS, the first deploy can fail with "Unable to assume the service linked role". ECS creates that role (`AWSServiceRoleForECS`) on first use, and it takes a minute before it works. Run `./scripts/release.sh` again a minute later. To avoid it, create the role before the first deploy: `aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com`.
 - The default region is `eu-north-1`. A project account is fixed to the region AWS assigned it, so check AWS Settings > Project.
 - The AWS Free plan includes every service used here ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
 
