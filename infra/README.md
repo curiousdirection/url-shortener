@@ -32,13 +32,13 @@ terraform init
 
 The defaults in `variables.tf` are the practice sizes. To change a setting such as `region`, put it in `infra/terraform.tfvars` (gitignored) or pass `-var`.
 
-`release.sh` tags the image with the git short SHA, so it refuses to run with uncommitted changes. On the first release it creates the image repository (the service needs an image, so the repository has to exist first). It then builds and pushes the image, and runs `terraform apply -var app_version=<sha>` for you to confirm. A release takes roughly 10 to 15 minutes, because `terraform apply` waits for the canary deployment to finish and fails if the deployment does. The first apply also creates the database, so it takes longer.
+`release.sh` tags the image with the git short SHA, so it refuses to run with uncommitted changes. On the first release it creates the image repository (the service needs an image, so the repository has to exist first). It then builds and pushes the image, and runs `terraform apply -var app_version=<sha>` for you to confirm. A release takes roughly 10 to 15 minutes, because `terraform apply` waits for the canary deployment to finish and fails if the deployment does. The first run takes about 15 to 25 minutes, because it also creates the database. Check the app is up; this should print `{"status":"ok"}`:
 
 ```bash
 curl $(terraform output -raw url)/health
 ```
 
-To release a change, commit and run `./scripts/release.sh` again. To change only settings, run `terraform apply -var app_version=<tag now running>`: `app_version` has no default, so every apply and destroy needs it.
+For any later change, code or settings, run `./scripts/release.sh` again. It deploys your current commit with your current settings (`terraform.tfvars` is gitignored, so editing it doesn't count as an uncommitted change).
 
 Tasks run the migrations on startup, so a release is one step; see [docs/decisions/0001](../docs/decisions/0001-run-migrations-on-every-instance.md).
 
