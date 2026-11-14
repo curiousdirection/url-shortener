@@ -48,15 +48,15 @@ resource "aws_iam_role_policy_attachment" "execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# The parameter uses the default AWS-managed key, so no KMS permission is needed.
+# The secret uses the default AWS-managed key, so no KMS permission is needed.
 resource "aws_iam_role_policy" "execution_db_password" {
   role = aws_iam_role.execution.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = "ssm:GetParameters"
-      Resource = aws_ssm_parameter.db_password.arn
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = aws_secretsmanager_secret.db.arn
     }]
   })
 }
@@ -148,21 +148,24 @@ resource "aws_ecs_express_gateway_service" "app" {
     # its name against the RDS CA bundle in the image.
     environment {
       name  = "DATABASE_URL"
-      value = "postgres://${aws_db_instance.main.username}@${aws_db_instance.main.address}:5432/${aws_db_instance.main.db_name}?sslmode=verify-full"
+      value = "postgres://${aws_rds_cluster.main.master_username}@${aws_rds_cluster.main.endpoint}:5432/${aws_rds_cluster.main.database_name}?sslmode=verify-full"
     }
+    # "<arn>:password::" picks the password key out of the secret's JSON.
     secret {
       name       = "PGPASSWORD"
-      value_from = aws_ssm_parameter.db_password.arn
+      value_from = "${aws_secretsmanager_secret.db.arn}:password::"
     }
   }
 
   # Destroy must not remove a role's policy before ECS is done with it, or the service gets
-  # stuck in DRAINING. The DB rule must exist before the first task starts, because it runs
-  # migrations on startup.
+  # stuck in DRAINING. The DB rule, the password and a database server must exist before the
+  # first task starts, because it runs migrations on startup.
   depends_on = [
     aws_iam_role_policy_attachment.execution,
     aws_iam_role_policy.execution_db_password,
     aws_iam_role_policy_attachment.infrastructure,
     aws_vpc_security_group_ingress_rule.db_from_app,
+    aws_secretsmanager_secret_version.db,
+    aws_rds_cluster_instance.main,
   ]
 }

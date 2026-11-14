@@ -19,7 +19,7 @@ flowchart LR
         end
     end
 
-    subgraph pg["Postgres (RDS, private subnets)"]
+    subgraph pg["Postgres (Aurora, private subnets)"]
         urls[("urls<br/>code PK, long_url")]
         seq[["url_code_seq"]]
     end
@@ -50,7 +50,7 @@ npm run dev
 
 ## Deploy
 
-The `Dockerfile` builds the app image, and [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode and RDS Postgres.
+The `Dockerfile` builds the app image, and [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode and Aurora PostgreSQL.
 
 ## API
 
