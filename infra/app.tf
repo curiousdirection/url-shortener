@@ -137,6 +137,8 @@ resource "aws_ecs_express_gateway_service" "app" {
 
     aws_logs_configuration {
       log_group = aws_cloudwatch_log_group.app.name
+      # The provider docs call this optional, but the AWS API rejects the service without it.
+      log_stream_prefix = "ecs"
     }
 
     # pg reads PGPASSWORD itself (see src/db.ts). verify-full checks the server certificate and
