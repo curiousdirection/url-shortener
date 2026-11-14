@@ -1,0 +1,223 @@
+# Deploys the app when something that goes into it changes on main: tests, then build the
+# image, push it to ECR and apply the app stack (infra/app). See "Deploy" in infra/README.md.
+#
+# Only the app stack is applied here. The network, the database and the IAM roles
+# (infra/foundation) are changed by a person, from their machine, after reading the plan on
+# the pull request.
+#
+# Every action is pinned to a full commit SHA, with its version in the comment (see ci.yml).
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    # Only what ends up in the image or in the app stack. A change to docs or tests alone
+    # doesn't ship anything.
+    paths:
+      - src/**
+      - migrations/**
+      - package.json
+      - package-lock.json
+      - Dockerfile
+      - .dockerignore
+      - .node-version
+      - infra/app/**
+      - .github/workflows/deploy.yml
+  # Run it by hand (Actions > Deploy > Run workflow). Leave app_version empty to deploy the
+  # latest commit of main. Fill it in to go back to an image that is already in ECR.
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: "Existing image tag to roll back to (7-character commit SHA). Skips the tests and the build."
+        required: false
+        type: string
+
+# One deploy at a time. A push that arrives while a deploy is running waits for it (it does
+# not cancel it: stopping an apply half way is worse than waiting). GitHub keeps only the
+# newest waiting run, which is fine: it deploys the newest commit anyway.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # lets the release job ask GitHub for the token that AWS checks
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    # A rollback must not depend on the tests passing for the latest commit.
+    if: inputs.app_version == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The same database as `postgres-test` in docker-compose.yml (and .env.test).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: urlshortener_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run migrate:test
+      - run: npm test
+      - run: npm run build
+
+  release:
+    needs: test
+    # Run after a passing test job, or when it was skipped (a rollback). Not when it failed.
+    if: ${{ !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    # Arm, to build the arm64 image that the service runs (cpu_architecture in infra/app/main.tf)
+    # natively instead of emulating it.
+    runs-on: ubuntu-24.04-arm
+    # Jobs in this environment can assume the deploy role, and the environment only accepts
+    # the main branch (Settings > Environments > production).
+    environment: production
+    # Applying waits for the new release to go live, which takes 10-15 minutes.
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      ROLLBACK_TO: ${{ inputs.app_version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: tf
+        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.tf.outputs.version }}
+          # The wrapper changes how output is captured; `terraform output -raw` needs it off.
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Init
+        run: |
+          : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable}"
+          terraform -chdir=infra/app init -input=false \
+            -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION"
+
+      # Is the app up? CI only updates a running service. If the stack was torn down (to save
+      # money between sessions), stop here and say so, instead of creating it again from a
+      # stray push. To bring it back, run infra/scripts/release.sh (see "Deploy" in infra/README.md).
+      - name: Check that the app is deployed
+        id: gate
+        run: |
+          if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
+            # An empty state is not an error here, but anything else (no access, no bucket) is.
+            if grep -q "No state file was found" err.txt; then
+              list=""
+            else
+              cat err.txt >&2
+              exit 1
+            fi
+          fi
+          if grep -qx 'aws_ecs_express_gateway_service.app' <<<"$list"; then
+            echo "deployed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Deploy skipped: the app is not deployed"
+              echo
+              echo "The app state has no \`aws_ecs_express_gateway_service.app\`, so the stack is torn down."
+              echo "Nothing was changed. To bring it up, run \`infra/scripts/release.sh\` from your machine."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The tag is the commit, the same as release.sh, so an image built by either is reused.
+      - name: Choose the image tag
+        id: tag
+        if: steps.gate.outputs.deployed == 'true'
+        run: |
+          repo="$(terraform -chdir=infra/app output -raw ecr_repository_url)"
+          tag="${ROLLBACK_TO:-$(git rev-parse --short=7 HEAD)}"
+          if aws ecr describe-images --repository-name "${repo#*/}" --image-ids "imageTag=$tag" >/dev/null 2>&1; then
+            exists=true
+          else
+            exists=false
+          fi
+          if [ -n "$ROLLBACK_TO" ] && [ "$exists" = false ]; then
+            echo "::error::There is no image tagged $ROLLBACK_TO in ECR, so there is nothing to roll back to."
+            exit 1
+          fi
+          {
+            echo "repo=$repo"
+            echo "tag=$tag"
+            echo "exists=$exists"
+          } >> "$GITHUB_OUTPUT"
+
+      # Tags are immutable, so an image that is already there is kept (a re-run, or an image
+      # that release.sh pushed from your machine).
+      - name: Build and push the image
+        if: steps.gate.outputs.deployed == 'true' && steps.tag.outputs.exists == 'false'
+        env:
+          REPO: ${{ steps.tag.outputs.repo }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
+          docker build --platform linux/arm64 --build-arg NODE_VERSION="$(cat .node-version)" -t "$REPO:$TAG" .
+          docker push "$REPO:$TAG"
+
+      # Plan to a file, then apply exactly that file: what is applied is what was planned.
+      # -lock-timeout: if release.sh is running on your machine, wait for it instead of failing.
+      - name: Plan
+        if: steps.gate.outputs.deployed == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          terraform -chdir=infra/app plan -input=false -lock-timeout=10m -no-color \
+            -var "app_version=$TAG" -out=tfplan | tee plan.txt
+          {
+            echo "### Terraform plan"
+            echo
+            echo '```'
+            head -c 900000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Waits until the new release is live. Express Mode starts it with a share of the
+      # traffic and rolls back by itself if its alarm fires; then this step fails.
+      - name: Apply
+        if: steps.gate.outputs.deployed == 'true'
+        run: terraform -chdir=infra/app apply -input=false -lock-timeout=10m tfplan
+
+      - name: Check /health
+        id: health
+        if: steps.gate.outputs.deployed == 'true'
+        run: |
+          url="$(terraform -chdir=infra/app output -raw url)"
+          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors "$url/health"
+          echo
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        if: steps.gate.outputs.deployed == 'true'
+        env:
+          URL: ${{ steps.health.outputs.url }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          {
+            echo "### Deployed"
+            echo
+            echo "- URL: $URL"
+            echo "- Image tag: \`$TAG\`"
+            if [ -n "$ROLLBACK_TO" ]; then echo "- Rolled back by hand to this tag."; fi
+          } >> "$GITHUB_STEP_SUMMARY"

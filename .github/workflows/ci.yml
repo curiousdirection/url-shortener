@@ -1,0 +1,167 @@
+# Checks on every pull request: the tests, the build, the Terraform files, and what the
+# Terraform stacks would change. Nothing here changes anything in AWS.
+#
+# Every action is pinned to a full commit SHA (a tag can be moved; a SHA can't), with its
+# version in the comment. To update one, look up the new tag's commit with
+#   git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'
+# (use the line ending in ^{} if there is one), change both, and check the run.
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to the same pull request replaces the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # Makes `a | b` fail if `a` fails, and `set -e` apply to every step.
+    shell: bash
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The same database as `postgres-test` in docker-compose.yml (and .env.test).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: urlshortener_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run migrate:test
+      - run: npm test
+      - run: npm run build
+
+  terraform-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: tf
+        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.tf.outputs.version }}
+          # The wrapper changes how output is captured; we don't need it.
+          terraform_wrapper: false
+      - name: Format
+        run: terraform fmt -check -recursive -diff infra
+      - name: Validate
+        # -backend=false: check the files only, without reaching the state in S3.
+        run: |
+          for stack in bootstrap foundation app; do
+            echo "::group::$stack"
+            terraform -chdir="infra/$stack" init -backend=false -input=false
+            terraform -chdir="infra/$stack" validate
+            echo "::endgroup::"
+          done
+
+  # What would the foundation and app stacks change? Shown in the job summary of the run.
+  # Uses the read-only plan role (infra/bootstrap), so it can look but not change anything.
+  # Skipped, with a note, until the AWS_PLAN_ROLE_ARN variable is set (see infra/README.md),
+  # and for pull requests from forks, which GitHub gives no token to sign in to AWS.
+  plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # lets the job ask GitHub for the token that AWS checks
+    env:
+      PLAN_ROLE: ${{ vars.AWS_PLAN_ROLE_ARN }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - name: Say that the plan is skipped
+        if: env.PLAN_ROLE == ''
+        run: |
+          {
+            echo "### Terraform plan: skipped"
+            echo
+            echo "The \`AWS_PLAN_ROLE_ARN\` variable is not set, so there is no plan. See \"Set up\" in infra/README.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.PLAN_ROLE != ''
+      - id: tf
+        if: env.PLAN_ROLE != ''
+        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: env.PLAN_ROLE != ''
+        with:
+          terraform_version: ${{ steps.tf.outputs.version }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        if: env.PLAN_ROLE != ''
+        with:
+          role-to-assume: ${{ env.PLAN_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Init
+        if: env.PLAN_ROLE != ''
+        run: |
+          : "${AWS_REGION:?Set the AWS_REGION repository variable}"
+          : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable}"
+          for stack in foundation app; do
+            terraform -chdir="infra/$stack" init -input=false \
+              -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION"
+          done
+      # -lock=false: the plan role can't write, and taking the state lock writes a file. A plan
+      # changes nothing, so it doesn't need the lock.
+      - name: Plan foundation
+        if: env.PLAN_ROLE != ''
+        run: |
+          terraform -chdir=infra/foundation plan -input=false -lock=false -no-color | tee plan.txt
+          {
+            echo "### Terraform plan: foundation"
+            echo
+            echo "You apply this stack yourself, after reading this. See \"Deploy\" in infra/README.md."
+            echo
+            echo '```'
+            head -c 900000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Plan app
+        if: env.PLAN_ROLE != ''
+        run: |
+          # The app stack reads the foundation outputs. If the foundation is torn down (or not
+          # applied yet) there are none, and a plan could only fail.
+          outputs="$(terraform -chdir=infra/foundation output -json 2>/dev/null || echo '{}')"
+          if ! jq -e 'length > 0' <<<"$outputs" >/dev/null; then
+            {
+              echo "### Terraform plan: app"
+              echo
+              echo "Skipped: the foundation stack has no outputs, so it is not applied (or is torn down)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Keep the image that runs now, so that the plan shows only real changes to the
+          # infrastructure. With no app deployed yet, any value will do.
+          current="$(terraform -chdir=infra/app output -raw app_version 2>/dev/null || echo none)"
+          terraform -chdir=infra/app plan -input=false -lock=false -no-color -var "app_version=$current" | tee plan.txt
+          {
+            echo "### Terraform plan: app"
+            echo
+            echo "CI applies this stack when the pull request is merged and the paths in deploy.yml changed."
+            echo
+            echo '```'
+            head -c 900000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
