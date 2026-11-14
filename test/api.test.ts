@@ -7,7 +7,7 @@ import { createUrlService } from "../src/urlService.js";
 import { createClient } from "./support/httpClient.js";
 
 const pool = createPool();
-const app = buildApp(createUrlService(pool, createCodeGenerator(pool)), "http://short.test");
+const app = buildApp(createUrlService(pool, createCodeGenerator(pool)));
 
 const client = createClient(app);
 const post = (body: unknown) => client.post("/api/urls", body);
@@ -25,7 +25,7 @@ describe("POST /api/urls", () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.code).toHaveLength(6);
-    expect(body.shortUrl).toBe(`http://short.test/${body.code}`);
+    expect(body.shortUrl).toBe(`http://localhost/${body.code}`);
 
     const redirect = await client.get(`/${body.code}`);
     expect(redirect.status).toBe(302);

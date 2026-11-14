@@ -1,12 +1,11 @@
 # The Postgres database (Amazon RDS), its firewall and its password.
 
-# A security group is a firewall attached to a resource. This one is for the database and
-# starts empty (nothing allowed in). The rule that opens it to the app servers is added
-# together with the app servers.
+# A security group is a firewall attached to a resource. This one is for the database. The only
+# rule that lets anything in is db_from_app in app.tf.
 resource "aws_security_group" "db" {
   # AWS requires unique names; `name_prefix` lets AWS add a random suffix.
   name_prefix = "${var.name}-db-"
-  description = "Postgres from the app instances only"
+  description = "Postgres from the app tasks only"
   vpc_id      = module.vpc.vpc_id
 
   # When this must be replaced, create the new one first, then delete the old one.
@@ -17,15 +16,16 @@ resource "aws_security_group" "db" {
 }
 
 # A random 32-character password, generated once on the first apply and kept in the state.
-# Alphanumeric only, so it can go into DATABASE_URL without escaping.
+# Alphanumeric only, so it never needs escaping.
 resource "random_password" "db" {
   length  = 32
   special = false
 }
 
-# Stores the password in AWS Systems Manager Parameter Store so the app servers can read it
-# at boot. "SecureString" means it is encrypted. The app servers' IAM role is
-# allowed to read this one parameter and nothing else.
+# Stores the password in AWS Systems Manager Parameter Store. "SecureString" means it is
+# encrypted. ECS reads it when it starts a task and passes it in as PGPASSWORD; the task
+# execution role may read this one parameter and nothing else. (An RDS-managed password
+# would rotate every 7 days, and running tasks would keep the old one.)
 resource "aws_ssm_parameter" "db_password" {
   name  = "/${var.name}/db_password"
   type  = "SecureString"

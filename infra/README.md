@@ -1,41 +1,70 @@
 # Deploying to AWS
 
-Terraform for a VPC and an RDS Postgres database. The app servers and the load balancer are added in the next change.
+Runs the app on [Amazon ECS Express Mode](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-overview.html) with an RDS Postgres database. Practice uses the defaults in `variables.tf`; `full-scale.tfvars.example` shows full-scale sizes (reference only).
 
 ```
-VPC: 2 public subnets (empty for now) + 2 database subnets -> RDS Postgres 16
+Internet -> ALB (HTTPS) -> Fargate tasks (:3000, public subnets) -> RDS Postgres 16 (private subnets)
 ```
 
-- **Community module:** the network (VPC, subnets, route tables) uses [terraform-aws-modules/vpc](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws), the way most teams do. Everything else is written by hand so each piece is visible. Run `terraform init` to download it.
-- **No NAT gateway:** it costs about $33/month and nothing here needs it.
-- **Private database:** it sits in subnets with no route to the internet, behind a security group with no inbound rules yet.
-- **Local state:** it contains the DB password, so it is gitignored. A remote backend is a follow-up.
+From the one service in `app.tf`, Express Mode creates the load balancer, HTTPS certificate, autoscaling and canary deployments ([what it creates](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)). Tasks get public IPs instead of a NAT gateway, and only the load balancer can reach them. The Terraform state holds the database password, so it stays local and gitignored.
 
 ## Prerequisites
 
-- [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` once in the repo; it installs the pinned version from `.terraform-version`.
-- An AWS CLI profile that can create the resources (`export AWS_PROFILE=...`).
-- The default region is `eu-north-1`. A project account is fixed to the region AWS assigned it, so check AWS Settings > Project.
+- Terraform via [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` in the repo.
+- An AWS CLI profile that can create the resources, Docker and git.
+- Your account's region (AWS Settings > Project). The default is `eu-north-1`; to change it, put `region = "..."` in `infra/terraform.tfvars`.
+- Everything used is on the AWS Free plan ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
 
-## Apply and destroy
+## Deploy
+
+Commit, then:
 
 ```bash
 cd infra
-cp terraform.tfvars.example terraform.tfvars   # optional: adjust sizes and region
 terraform init
-terraform apply
-terraform destroy
+./scripts/release.sh
 ```
 
-After a destroy, check that nothing is left. Both commands should print nothing:
+`release.sh` builds the image, tags it with the commit, pushes it and runs `terraform apply` for you to confirm. The first run takes 15–25 minutes because it creates the database; later ones 10–15, because the apply waits for the release to go live. Then check:
+
+```bash
+curl $(terraform output -raw url)/health   # {"status":"ok"}
+```
+
+Run `release.sh` again for any later change, code or settings. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
+
+If the first deploy fails with "Unable to assume the service linked role", ECS has just created that role for the account: run `release.sh` again a minute later.
+
+## Rollback
+
+A release first gets 5% of traffic and rolls back by itself if its error alarm fires; `terraform apply` then fails. The alarm adds the app's 4xx to its 5xx, ignoring fewer than 5 4xx in a check, and fires above 1% of requests ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)). A few stray 404s don't matter, but if more than 1% of real traffic is unknown codes or taken aliases, a good release rolls back. To go back to an earlier release:
+
+```bash
+terraform apply -var app_version=<earlier commit sha>
+```
+
+ECR keeps the last 10 images. Migrations aren't rolled back, so each must work with the previous code too.
+
+## Tear down
+
+```bash
+terraform destroy -var app_version=none
+```
+
+Express Mode removes what it created. Then check nothing is left; both should print nothing:
 
 ```bash
 aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key=Project,Values=url-shortener --query 'ResourceTagMappingList[].ResourceARN' --output text
 aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first lists anything tagged for this project. It updates slowly and can show deleted resources for a few hours: if `terraform state list` prints nothing and a direct lookup (e.g. `aws rds describe-db-instances --region eu-north-1 --db-instance-identifier url-shortener`) returns not found, those ARNs are stale and cost nothing. The second lists every manual snapshot in the account; only `url-shortener-final-*` ones come from this stack, and keep costing money. The defaults skip the final snapshot, so there should be none. Delete a leftover with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`.
+The first can still list deleted resources for a few hours; if `terraform state list` is empty, they're stale. The second lists manual snapshots; only `url-shortener-final-*` ones are from this stack (full-scale settings keep one; delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`). An empty `default` ECS cluster may stay behind; it's free.
 
 ## Cost
 
-About $0.02/hour, roughly $14/month if left running, for the database in `eu-north-1` (Stockholm), the default region: `db.t4g.micro` Single-AZ at $0.016/hour plus 20 GB of gp3 storage at $0.12 per GB-month ($2.40/month). These are on-demand prices from the AWS Price List published 2026-11-12; check the AWS Pricing Calculator for current figures and other regions. Cost alerts are account-wide, so they are not part of this Terraform; set a budget once in the AWS console.
+On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
+
+- **Practice:** about $50/month if left running: load balancer ~$17, one small task ~$8, database ~$14 including 20 GB of storage, public IPv4 ~$11. Destroy between sessions and it's a few dollars a month. Set a budget alert in the AWS console.
+- **Full scale:** about $6,200/month: data transfer out ~$2,650, load balancer ~$2,590 (it bills by new connections per second, and nearly every redirect is one), tasks ~$440, RDS ~$430 (Multi-AZ instance and 300 GB), IPv4 ~$40. An NLB with EC2 servers would cost roughly $2,100 less, for more parts to run ([ADR 0002](../docs/decisions/0002-deploy-with-ecs-express-mode.md)).
+
+Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,300/month.

@@ -1,6 +1,6 @@
 # 1. Run database migrations on every app instance at boot
 
-Date: 2026-11-12. Status: accepted.
+Date: 2026-11-12. Status: accepted; amended by [0002](0002-deploy-with-ecs-express-mode.md).
 
 ## Context
 

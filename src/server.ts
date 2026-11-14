@@ -6,23 +6,23 @@ import { createPool } from "./db.js";
 import { createUrlService } from "./urlService.js";
 
 const pool = createPool();
-const app = buildApp(createUrlService(pool, createCodeGenerator(pool)), config.baseUrl);
+const app = buildApp(createUrlService(pool, createCodeGenerator(pool)));
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) =>
   console.log(`listening on :${info.port}`),
 );
 
-// On SIGTERM (instance refresh, scale-in): stop accepting connections, let
-// in-flight requests finish, close the pool, then exit.
+// On SIGTERM (deployment, scale-in): stop accepting connections, let in-flight requests
+// finish, close the pool, then exit.
 let shuttingDown = false;
 const shutdown = (signal: string) => {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`${signal} received, shutting down`);
 
-  // Backstop in case a client holds a connection open. Keep it below the 30 s that systemd
-  // (TimeoutStopSec) gives the service to stop. When deployed behind a load balancer and an
-  // auto scaling group, SIGTERM arrives after traffic has drained.
+  // Backstop in case a client holds a connection open. Keep it below the 30 s ECS waits
+  // (stopTimeout) before SIGKILL. ECS sends SIGTERM only after the load balancer has drained
+  // the task.
   setTimeout(() => process.exit(1), 25_000).unref();
 
   // close() also drops idle keep-alive connections (Node 19+).

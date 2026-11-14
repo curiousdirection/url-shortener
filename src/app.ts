@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { AliasTakenError, type UrlService } from "./urlService.js";
@@ -24,7 +24,14 @@ const createSchema = z.object({
     .optional(),
 });
 
-export function buildApp(service: UrlService, baseUrl: string) {
+// The address the client called. Behind the load balancer the request arrives as plain http, and
+// X-Forwarded-Proto says whether the client used https.
+const requestOrigin = (c: Context) => {
+  const { protocol, host } = new URL(c.req.url);
+  return c.req.header("x-forwarded-proto") === "https" ? `https://${host}` : `${protocol}//${host}`;
+};
+
+export function buildApp(service: UrlService) {
   const app = new Hono();
 
   app.get("/health", (c) => c.json({ status: "ok" }));
@@ -33,7 +40,7 @@ export function buildApp(service: UrlService, baseUrl: string) {
     const { url, alias } = c.req.valid("json");
     try {
       const code = await service.create(url, alias);
-      return c.json({ code, shortUrl: `${baseUrl}/${code}`, longUrl: url }, 201);
+      return c.json({ code, shortUrl: `${requestOrigin(c)}/${code}`, longUrl: url }, 201);
     } catch (e) {
       if (e instanceof AliasTakenError) return c.json({ error: "alias already taken" }, 409);
       throw e;
