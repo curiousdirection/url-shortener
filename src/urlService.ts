@@ -15,6 +15,7 @@ const isUniqueViolation = (e: unknown) =>
   typeof e === "object" && e !== null && (e as { code?: string }).code === UNIQUE_VIOLATION;
 
 export function createUrlService(pool: Pool, codes: CodeGenerator): UrlService {
+  console.log("test release")
   const insert = (code: string, longUrl: string) =>
     pool.query("INSERT INTO urls (code, long_url) VALUES ($1, $2)", [code, longUrl]);
 
