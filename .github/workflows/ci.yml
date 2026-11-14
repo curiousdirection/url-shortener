@@ -24,45 +24,16 @@ defaults:
     shell: bash
 
 jobs:
+  # The tests and the build. The same workflow runs before a deploy (see deploy.yml).
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # The same database as `postgres-test` in docker-compose.yml (and .env.test).
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: urlshortener_test
-        ports: ["5433:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
-          cache: npm
-      - run: npm ci
-      - run: npm run migrate:test
-      - run: npm test
-      - run: npm run build
+    uses: ./.github/workflows/test.yml
 
   terraform-check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: tf
-        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: ${{ steps.tf.outputs.version }}
-          # The wrapper changes how output is captured; we don't need it.
-          terraform_wrapper: false
+      - uses: ./.github/actions/setup-terraform
       - name: Format
         run: terraform fmt -check -recursive -diff infra
       - name: Validate
@@ -80,70 +51,72 @@ jobs:
   #
   # There is no foundation plan here: refreshing it would decrypt the database password, and
   # any pull request can use this role. Plan the foundation yourself before applying it.
-  # Skipped, with a note, until the AWS_PLAN_ROLE_ARN variable is set (see infra/README.md),
-  # and for pull requests from forks, which GitHub gives no token to sign in to AWS.
+  #
+  # Runs when the AWS_PLAN_ROLE_ARN variable is set (see infra/README.md; `plan-skipped`
+  # below says so when it is not), and not for pull requests from forks, which GitHub gives no
+  # token to sign in to AWS.
   plan:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository && vars.AWS_PLAN_ROLE_ARN != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       id-token: write # lets the job ask GitHub for the token that AWS checks
     env:
-      PLAN_ROLE: ${{ vars.AWS_PLAN_ROLE_ARN }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      # The app stack reads the foundation state from the same bucket (state_bucket in
+      # infra/app/variables.tf).
+      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
     steps:
-      - name: Say that the plan is skipped
-        if: env.PLAN_ROLE == ''
-        run: |
-          {
-            echo "### Terraform plan: skipped"
-            echo
-            echo "The \`AWS_PLAN_ROLE_ARN\` variable is not set, so there is no plan. See \"Set up\" in infra/README.md."
-          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.PLAN_ROLE != ''
-      - id: tf
-        if: env.PLAN_ROLE != ''
-        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        if: env.PLAN_ROLE != ''
-        with:
-          terraform_version: ${{ steps.tf.outputs.version }}
-          terraform_wrapper: false
+      - uses: ./.github/actions/setup-terraform
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        if: env.PLAN_ROLE != ''
         with:
-          role-to-assume: ${{ env.PLAN_ROLE }}
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Init
-        if: env.PLAN_ROLE != ''
+
+      # The app stack reads the foundation outputs. If the foundation was never applied, or is
+      # torn down, there are none, and a plan could only fail. Look at the foundation's state
+      # file directly (the plan role may read it), instead of setting the whole stack up.
+      #
+      # Only "there is no such file" and "the file has no outputs" mean "not applied". Anything
+      # else (no access, wrong bucket, a file that isn't state) fails the job with its message.
+      - name: Check that the foundation is applied
+        id: foundation
         run: |
           : "${AWS_REGION:?Set the AWS_REGION repository variable}"
           : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable}"
-          # The foundation is initialised only to read its outputs; it is not planned.
-          for stack in foundation app; do
-            terraform -chdir="infra/$stack" init -input=false \
-              -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION"
-          done
-      - name: Plan app
-        if: env.PLAN_ROLE != ''
-        run: |
-          # The app stack reads the foundation outputs. If the foundation is torn down (or not
-          # applied yet) there are none, and a plan could only fail.
-          outputs="$(terraform -chdir=infra/foundation output -json 2>/dev/null || echo '{}')"
-          if ! jq -e 'length > 0' <<<"$outputs" >/dev/null; then
+          state="$RUNNER_TEMP/foundation.tfstate"
+          if aws s3api get-object --bucket "$TF_STATE_BUCKET" --key foundation/terraform.tfstate "$state" >/dev/null 2>"$RUNNER_TEMP/err.txt"; then
+            # jq fails (and so does this step) if the file is not valid JSON.
+            outputs="$(jq '(.outputs // {}) | length' "$state")"
+          elif grep -q NoSuchKey "$RUNNER_TEMP/err.txt"; then
+            outputs=0
+          else
+            cat "$RUNNER_TEMP/err.txt" >&2
+            exit 1
+          fi
+          if [ "$outputs" -gt 0 ]; then
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
             {
               echo "### Terraform plan: app"
               echo
               echo "Skipped: the foundation stack has no outputs, so it is not applied (or is torn down)."
             } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
           fi
+
+      - name: Plan app
+        if: steps.foundation.outputs.applied == 'true'
+        run: |
+          terraform -chdir=infra/app init -input=false \
+            -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION"
           # Keep the image that runs now, so that the plan shows only real changes to the
-          # infrastructure. With no app deployed yet, any value will do.
-          current="$(terraform -chdir=infra/app output -raw app_version 2>/dev/null || echo none)"
+          # infrastructure. With no app deployed yet, any value will do. (`output -json` prints
+          # {} for an empty state, and fails on any real error.)
+          current="$(terraform -chdir=infra/app output -json | jq -r '.app_version.value // "none"')"
           # -lock=false: the plan role can't write, and taking the state lock writes a file. A
           # plan changes nothing, so it doesn't need the lock.
           terraform -chdir=infra/app plan -input=false -lock=false -no-color -var "app_version=$current" | tee plan.txt
@@ -155,4 +128,17 @@ jobs:
             echo '```'
             head -c 900000 plan.txt
             echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Says why there is no plan, when the variable is not set yet.
+  plan-skipped:
+    if: github.event.pull_request.head.repo.full_name == github.repository && vars.AWS_PLAN_ROLE_ARN == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          {
+            echo "### Terraform plan: skipped"
+            echo
+            echo "The \`AWS_PLAN_ROLE_ARN\` variable is not set, so there is no plan. See \"Set up\" in infra/README.md."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -15,7 +15,8 @@ We want a push to `main` to ship the app. CI can't use a local state file, and i
 - **No password in state.** The password is an `ephemeral "random_password"`, passed to `aws_ssm_parameter` as `value_wo`. The database does not get its own copy: `aws_db_instance` takes `password_wo` from an ephemeral read of the parameter, so it always receives what the parameter holds. All of these are write-only or ephemeral: sent to AWS, never written to the plan or the state. A `terraform_data` marker, replaced whenever the parameter is created or written, is the database's `password_wo_version`, so a new parameter always means the database is sent the password again.
 - **CI applies only the app stack.** `.github/workflows/deploy.yml` runs on a push to `main` that changes the app, tests, builds the image, plans, applies the saved plan and checks `/health`. You apply the foundation from your machine, after reading its plan there.
 - **GitHub signs in with OIDC, with two roles.** `github-deploy-url-shortener` can be assumed only by the `production` environment on `main`. It can push images and update the one service, and pass the two ECS roles to ECS. `github-plan-url-shortener` can be assumed by any pull request of this repository, is read-only, plans only the app stack and is denied every secret. Neither can change IAM or the bootstrap.
-- **Every action is pinned to a commit SHA.**
+- **Every action is pinned to a commit SHA.** The tests are one reusable workflow (`test.yml`) and installing Terraform is one local action (`.github/actions/setup-terraform`), so `ci.yml` and `deploy.yml` can't drift apart. Only the release job of `deploy.yml` may ask for an OIDC token (`id-token: write`); the test job, which runs npm packages, can't.
+- **One source for the state bucket.** The app stack gets the bucket name from its `state_bucket` variable (the `TF_STATE_BUCKET` variable in CI), not by rebuilding the name from the account id.
 
 ## Why
 

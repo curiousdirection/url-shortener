@@ -51,11 +51,12 @@ If the account already has a GitHub OIDC provider (AWS allows one), the apply fa
 ```bash
 cd infra
 cp backend.hcl.example backend.hcl    # put the bucket from `output state_bucket` in it
+echo 'state_bucket = "<the same bucket>"' > app/terraform.tfvars
 terraform -chdir=foundation init -backend-config=../backend.hcl
 terraform -chdir=app init -backend-config=../backend.hcl
 ```
 
-`backend.hcl` is gitignored (it names your account). The state is locked with a small file in the bucket while Terraform runs, so two runs can't collide.
+The app stack reads the foundation's state from the same bucket, so it needs the name too: that is `state_bucket` in `app/terraform.tfvars`. It has no default, so the stack never guesses the name. CI sets it from `TF_STATE_BUCKET`. Both files are gitignored (they name your account). The state is locked with a small file in the bucket while Terraform runs, so two runs can't collide.
 
 ### 3. Set up GitHub
 
@@ -66,11 +67,11 @@ Then add these variables under Settings > Secrets and variables > Actions > Vari
 | Variable | Value | Where |
 | --- | --- | --- |
 | `AWS_REGION` | `eu-north-1` | Repository |
-| `TF_STATE_BUCKET` | `terraform output state_bucket` | Repository |
+| `TF_STATE_BUCKET` | `terraform output state_bucket`. The one place CI gets the bucket name from: it is used for the backend and as the app stack's `state_bucket` | Repository |
 | `AWS_PLAN_ROLE_ARN` | `terraform output plan_role_arn` | Repository |
 | `AWS_DEPLOY_ROLE_ARN` | `terraform output deploy_role_arn` | Environment `production` |
 
-Until `AWS_PLAN_ROLE_ARN` is set, the pull request check skips the app plan and says so in its summary.
+Until `AWS_PLAN_ROLE_ARN` is set, the pull request check skips the app plan and says so in its summary. The plan also needs the foundation to be applied: it reads the foundation's state file in the bucket, and says "skipped" if there are no outputs in it. Any other problem reading it (no access, wrong bucket) fails the check.
 
 ## First run
 
@@ -102,11 +103,11 @@ Then merge a small app change and watch it go out by itself.
 
 ## Deploy
 
-**Normal case.** Merge to `main`. If the change touches `src/`, `migrations/`, `package.json`, `package-lock.json`, `Dockerfile`, `.dockerignore`, `.node-version`, `infra/app/` or `deploy.yml`, the workflow runs:
+**Normal case.** Merge to `main`. If the change touches `src/`, `migrations/`, `package.json`, `package-lock.json`, `tsconfig.json`, `Dockerfile`, `.dockerignore`, `.node-version`, `.terraform-version`, `infra/app/`, or the workflow files that deploy (`deploy.yml`, `test.yml`, `.github/actions/setup-terraform/`), the workflow runs:
 
 1. Tests, against a Postgres 16 service.
 2. A check that the app is deployed. If the stack is torn down, the run ends green with "the app is not deployed" in its summary, and changes nothing.
-3. Build the image for arm64, tagged with the 7-character commit, and push it. Skipped if that tag is already in ECR.
+3. Build the image for arm64, tagged with the first 7 characters of the commit SHA, and push it. Skipped if that tag is already in ECR.
 4. `terraform plan`, then `terraform apply` of that saved plan. The apply waits for the release to go live (10-15 minutes).
 5. `curl` on `/health`. The URL and the tag are in the run's summary.
 
@@ -139,7 +140,7 @@ A release first gets 5% of traffic and rolls back by itself if its error alarm f
 
 To go back to an earlier release that was already live:
 
-- In GitHub, Actions > Deploy > Run workflow, on `main`, with `app_version` set to the earlier 7-character commit. It skips the tests and the build, and fails if that tag isn't in ECR.
+- In GitHub, Actions > Deploy > Run workflow, on `main`, with `app_version` set to the first 7 characters of the earlier commit SHA. It skips the tests and the build, and fails if that tag isn't in ECR.
 - Or revert the commit on `main` and let the workflow ship the revert.
 - Or from your machine: `terraform -chdir=infra/app apply -var app_version=<earlier commit>`.
 

@@ -11,24 +11,30 @@ name: Deploy
 on:
   push:
     branches: [main]
-    # Only what ends up in the image or in the app stack. A change to docs or tests alone
-    # doesn't ship anything.
+    # Only what ends up in the image or in the app stack, and the workflow files that deploy
+    # it. A change to docs or tests alone doesn't ship anything. The Dockerfile copies
+    # package.json, package-lock.json, tsconfig.json, src/ and migrations/, and takes the Node
+    # version from .node-version. .terraform-version is the Terraform that applies the stack.
     paths:
       - src/**
       - migrations/**
       - package.json
       - package-lock.json
+      - tsconfig.json
       - Dockerfile
       - .dockerignore
       - .node-version
+      - .terraform-version
       - infra/app/**
       - .github/workflows/deploy.yml
+      - .github/workflows/test.yml
+      - .github/actions/setup-terraform/**
   # Run it by hand (Actions > Deploy > Run workflow). Leave app_version empty to deploy the
   # latest commit of main. Fill it in to go back to an image that is already in ECR.
   workflow_dispatch:
     inputs:
       app_version:
-        description: "Existing image tag to roll back to (7-character commit SHA). Skips the tests and the build."
+        description: "Existing image tag to roll back to (the first 7 characters of the commit SHA). Skips the tests and the build."
         required: false
         type: string
 
@@ -39,9 +45,10 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false
 
+# Read-only by default. Only the release job may ask GitHub for the token that AWS checks
+# (`id-token`), so the test job, which runs npm packages, can't get AWS credentials.
 permissions:
   contents: read
-  id-token: write # lets the release job ask GitHub for the token that AWS checks
 
 defaults:
   run:
@@ -51,31 +58,7 @@ jobs:
   test:
     # A rollback must not depend on the tests passing for the latest commit.
     if: inputs.app_version == ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # The same database as `postgres-test` in docker-compose.yml (and .env.test).
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: urlshortener_test
-        ports: ["5433:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
-          cache: npm
-      - run: npm ci
-      - run: npm run migrate:test
-      - run: npm test
-      - run: npm run build
+    uses: ./.github/workflows/test.yml
 
   release:
     needs: test
@@ -87,22 +70,22 @@ jobs:
     # Jobs in this environment can assume the deploy role, and the environment only accepts
     # the main branch (Settings > Environments > production).
     environment: production
+    permissions:
+      contents: read
+      id-token: write # lets the job ask GitHub for the token that AWS checks
     # Applying waits for the new release to go live, which takes 10-15 minutes.
     timeout-minutes: 45
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      # The app stack reads the foundation state from the same bucket (state_bucket in
+      # infra/app/variables.tf).
+      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
       ROLLBACK_TO: ${{ inputs.app_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - id: tf
-        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: ${{ steps.tf.outputs.version }}
-          # The wrapper changes how output is captured; `terraform output -raw` needs it off.
-          terraform_wrapper: false
+      - uses: ./.github/actions/setup-terraform
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -142,17 +125,25 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # The tag is the commit, the same as release.sh, so an image built by either is reused.
+      # The tag is the first 7 characters of the commit SHA, the same as release.sh, so an image
+      # built by either is reused. (`git rev-parse --short=7` would not do: 7 is only its
+      # minimum, and it gives a longer name when 7 characters are ambiguous in the clone.)
       - name: Choose the image tag
         id: tag
         if: steps.gate.outputs.deployed == 'true'
         run: |
           repo="$(terraform -chdir=infra/app output -raw ecr_repository_url)"
-          tag="${ROLLBACK_TO:-$(git rev-parse --short=7 HEAD)}"
-          if aws ecr describe-images --repository-name "${repo#*/}" --image-ids "imageTag=$tag" >/dev/null 2>&1; then
+          sha="$(git rev-parse HEAD)"
+          tag="${ROLLBACK_TO:-${sha:0:7}}"
+          # Only "no such image" means the image is missing. Any other error (no access, no
+          # repository, no network) fails the job with its message.
+          if out="$(aws ecr describe-images --repository-name "${repo#*/}" --image-ids "imageTag=$tag" 2>&1)"; then
             exists=true
-          else
+          elif grep -q ImageNotFoundException <<<"$out"; then
             exists=false
+          else
+            echo "$out" >&2
+            exit 1
           fi
           if [ -n "$ROLLBACK_TO" ] && [ "$exists" = false ]; then
             echo "::error::There is no image tagged $ROLLBACK_TO in ECR, so there is nothing to roll back to."
