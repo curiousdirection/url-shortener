@@ -2,8 +2,8 @@
 # network, the database, its firewall, the two IAM roles ECS uses, and the database password.
 # The app stack (../app) reads what it needs from here. See docs/decisions/0003.
 #
-# CI only ever PLANS this stack. You apply it yourself, from your machine, after reading the
-# plan on the pull request (see "Deploy" in ../README.md).
+# CI never plans or applies this stack. You plan and apply it yourself, from your machine
+# (see "Deploy" in ../README.md).
 
 terraform {
   # Write-only arguments (used for the database password below) need Terraform 1.11 or newer.

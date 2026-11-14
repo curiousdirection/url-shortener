@@ -17,12 +17,12 @@ Terraform is split in three, each with its own state, so that the part that chan
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
 | `bootstrap/` | The S3 bucket for state, the GitHub sign-in (OIDC provider) and two IAM roles for CI | You, once, by hand |
-| `foundation/` | The VPC, the database and its password, the security groups, the two roles ECS uses | You, from your machine, after reading the plan on the pull request |
+| `foundation/` | The VPC, the database and its password, the security groups, the two roles ECS uses | You, from your machine, after reading `terraform plan` |
 | `app/` | The ECR repository, the log group, the ECS Express service | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 The state of `foundation/` and `app/` is in the S3 bucket. It holds no secrets: the database password is generated on each run and never stored ([ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md)). The state of `bootstrap/` stays on your machine (see "If you lose the bootstrap state").
 
-CI uses two roles that only GitHub's own sign-in can assume. `github-plan-url-shortener` is read-only and is used on pull requests. `github-deploy-url-shortener` can push images and update the one service, and only the `production` environment (the `main` branch) can use it. Neither can change IAM, the network or the database.
+CI uses two roles that only GitHub's own sign-in can assume. `github-plan-url-shortener` is read-only, is used on pull requests to plan the app stack, and is denied every secret. `github-deploy-url-shortener` can push images and update the one service, and only the `production` environment (the `main` branch) can use it. Neither can change IAM, the network or the database.
 
 ## Prerequisites
 
@@ -70,7 +70,7 @@ Then add these variables under Settings > Secrets and variables > Actions > Vari
 | `AWS_PLAN_ROLE_ARN` | `terraform output plan_role_arn` | Repository |
 | `AWS_DEPLOY_ROLE_ARN` | `terraform output deploy_role_arn` | Environment `production` |
 
-Until `AWS_PLAN_ROLE_ARN` is set, the pull request check skips the Terraform plans and says so in its summary.
+Until `AWS_PLAN_ROLE_ARN` is set, the pull request check skips the app plan and says so in its summary.
 
 ## First run
 
@@ -114,13 +114,14 @@ Only one deploy runs at a time. A push during a deploy waits its turn.
 
 **From your machine.** Commit, then run `infra/scripts/release.sh`. It does the same as the workflow, and asks you to confirm the apply. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
 
-**Infrastructure changes** (anything in `bootstrap/` or `foundation/`). The pull request check shows the foundation plan in its summary. Read it, then merge and apply it yourself:
+**Infrastructure changes** (anything in `bootstrap/` or `foundation/`). Pull requests don't plan these: refreshing the foundation would decrypt the database password, and any pull request can use the plan role. Check out the branch, read the plan, then merge and apply it yourself:
 
 ```bash
+terraform -chdir=infra/foundation plan
 terraform -chdir=infra/foundation apply
 ```
 
-If an app change needs a foundation change, apply the foundation first. The pull request plan shows it. CI never applies `foundation/` or `bootstrap/`.
+If an app change needs a foundation change, apply the foundation first. The app plan on the pull request fails or shows the gap. CI never applies `foundation/` or `bootstrap/`.
 
 ## Rotate the database password
 

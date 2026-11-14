@@ -2,8 +2,8 @@
 # image, push it to ECR and apply the app stack (infra/app). See "Deploy" in infra/README.md.
 #
 # Only the app stack is applied here. The network, the database and the IAM roles
-# (infra/foundation) are changed by a person, from their machine, after reading the plan on
-# the pull request.
+# (infra/foundation) are changed by a person, from their machine, after reading
+# `terraform plan` there.
 #
 # Every action is pinned to a full commit SHA, with its version in the comment (see ci.yml).
 name: Deploy

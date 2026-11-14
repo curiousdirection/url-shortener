@@ -255,14 +255,14 @@ resource "aws_iam_role" "plan" {
   })
 }
 
-# Read-only. It can read both state files and look at the resources in them, so that
-# `terraform plan` works for the foundation and app stacks. It can't write anything, which
-# is why CI runs the plans with -lock=false (taking the lock would write a file).
+# Read-only, for the app stack only. It can read both state files (the app stack reads the
+# foundation's outputs) and look at what the app stack manages, so that `terraform plan` works
+# for `infra/app`. It can't write anything, which is why CI runs the plan with -lock=false
+# (taking the lock would write a file).
 #
-# One thing to know: to refresh the database password parameter, Terraform has to read it, and
-# the default AWS-managed key lets any role with ssm:GetParameter decrypt it. So this role (and
-# so any pull request in this repository) can read the database password. The database itself
-# is only reachable from the app tasks. See docs/decisions/0003.
+# There is no foundation plan on pull requests: refreshing the database password parameter
+# would mean decrypting it, and any pull request can use this role. So this role is denied the
+# parameter and KMS decryption outright. You plan the foundation yourself before applying it.
 resource "aws_iam_role_policy" "plan" {
   name = "plan-read-only"
   role = aws_iam_role.plan.id
@@ -281,14 +281,11 @@ resource "aws_iam_role_policy" "plan" {
         Action   = "s3:GetObject"
         Resource = [local.foundation_state, local.app_state_arn]
       },
-      # Look at what the two stacks manage. Describe and List calls only.
+      # Look at what the app stack manages. Describe and List calls only.
       {
-        Sid    = "ReadResources"
+        Sid    = "ReadAppResources"
         Effect = "Allow"
         Action = [
-          "ec2:Describe*",
-          "rds:Describe*", "rds:ListTagsForResource",
-          "ssm:DescribeParameters", "ssm:ListTagsForResource",
           "ecr:DescribeRepositories", "ecr:DescribeImages", "ecr:ListTagsForResource",
           "ecr:GetLifecyclePolicy",
           "ecs:Describe*", "ecs:List*",
@@ -296,22 +293,15 @@ resource "aws_iam_role_policy" "plan" {
         ]
         Resource = "*"
       },
-      # The two roles in the foundation stack, and nothing else in IAM.
+      # A deny wins over any allow, so this holds even if an allow above is widened later.
       {
-        Sid    = "ReadFoundationRoles"
-        Effect = "Allow"
+        Sid    = "NoSecrets"
+        Effect = "Deny"
         Action = [
-          "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies",
-          "iam:ListAttachedRolePolicies", "iam:ListRoleTags", "iam:ListInstanceProfilesForRole",
+          "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath",
+          "ssm:GetParameterHistory", "kms:Decrypt", "secretsmanager:GetSecretValue",
         ]
-        Resource = [local.execution_role_arn, local.infrastructure_role_arn]
-      },
-      # The one parameter (see the note above).
-      {
-        Sid      = "ReadPasswordParameter"
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:${var.region}:${local.account_id}:parameter/${var.name}/db_password"
+        Resource = "*"
       },
     ], local.deny_statements)
   })

@@ -13,23 +13,23 @@ We want a push to `main` to ship the app. CI can't use a local state file, and i
 - **Three stacks, each with its own state.** `infra/bootstrap` (the state bucket, GitHub's sign-in and two CI roles), `infra/foundation` (VPC, database, security groups, the two ECS roles, the password parameter) and `infra/app` (ECR, log group, the ECS Express service). `app` reads the foundation's outputs with `terraform_remote_state`.
 - **State in S3** with versioning, encryption, public access blocked, HTTPS only, and locking with a lock file (`use_lockfile`, so no DynamoDB table). The bootstrap's own state stays local: it holds no secrets and can't live in a bucket that doesn't exist yet.
 - **No password in state.** The password is an `ephemeral "random_password"`, passed to `aws_db_instance` as `password_wo` and to `aws_ssm_parameter` as `value_wo`. Both are write-only: sent to AWS, never written to the plan or the state. A `*_version` argument controls when they are sent again.
-- **CI applies only the app stack.** `.github/workflows/deploy.yml` runs on a push to `main` that changes the app, tests, builds the image, plans, applies the saved plan and checks `/health`. You apply the foundation from your machine, after reading its plan on the pull request.
-- **GitHub signs in with OIDC, with two roles.** `github-deploy-url-shortener` can be assumed only by the `production` environment on `main`. It can push images and update the one service, and pass the two ECS roles to ECS. `github-plan-url-shortener` can be assumed by any pull request of this repository and is read-only. Neither can change IAM or the bootstrap.
+- **CI applies only the app stack.** `.github/workflows/deploy.yml` runs on a push to `main` that changes the app, tests, builds the image, plans, applies the saved plan and checks `/health`. You apply the foundation from your machine, after reading its plan there.
+- **GitHub signs in with OIDC, with two roles.** `github-deploy-url-shortener` can be assumed only by the `production` environment on `main`. It can push images and update the one service, and pass the two ECS roles to ECS. `github-plan-url-shortener` can be assumed by any pull request of this repository, is read-only, plans only the app stack and is denied every secret. Neither can change IAM or the bootstrap.
 - **Every action is pinned to a commit SHA.**
 
 ## Why
 
 - **A release can't break the foundation.** The deploy role has no permission on the network, the database or IAM, so a bad commit or a leaked token can at worst push an image and update one service.
 - **The password never reaches S3 or the logs.** Locking down a bucket that holds secrets is a weaker answer than not putting them there, and the state also goes to CI and to its logs.
-- **A person reads every infrastructure change.** The foundation plan appears on each pull request, and applying it is a deliberate step.
+- **A person reads every infrastructure change.** Applying the foundation is a deliberate step, after reading its plan.
 - **No stored keys.** OIDC gives each run credentials that expire in an hour.
 - **Canary and rollback stay.** Express Mode's canary and automatic rollback are unchanged, and a rolled-back release fails the run.
 
 ## Consequences
 
-- **The foundation is applied by hand.** If an app change needs a foundation change, the foundation must be applied before the merge. The pull request plan shows it.
+- **The foundation is applied by hand.** If an app change needs a foundation change, the foundation must be applied before the merge. The app plan on the pull request fails or shows the gap.
 - **The deploy role can't create the service.** CI only updates a service that exists. If the stack is torn down, a push ends green with a note ("the app is not deployed") and changes nothing. Bringing it back is `release.sh`, on purpose: a stray push shouldn't start a bill. A change that would replace the service also fails in CI, instead of taking the app down.
-- **The plan role can read the database password.** Terraform refreshes the password parameter, and the default AWS-managed key lets any role with `ssm:GetParameter` decrypt it. So any pull request in this repository can read the password. The database is private and only the app tasks can reach it, so this is accepted for a one-person practice setup. A customer-managed key that the plan role can't use would close it, but then the foundation plan can't refresh the parameter.
+- **No foundation plan on pull requests.** Refreshing the foundation reads the password parameter, and the default AWS-managed key lets any role with `ssm:GetParameter` decrypt it. Any pull request can use the plan role, so the role is denied SSM parameter reads, KMS decryption and Secrets Manager values, and plans only the app stack. You plan the foundation yourself. A customer-managed key the plan role can't use, plus `-refresh=false`, would bring the pull request plan back without the password.
 - **A new password breaks running tasks** until they are replaced, because they read the password when they start. See "Rotate the database password" in [infra/README.md](../../infra/README.md).
 - **If the database is replaced**, the parameter is replaced with it (`replace_triggered_by`), so the two keep the same password.
 - **The first runs need care.** Repositories created or renamed after 15 July 2026 sign in with an ID-based `sub` claim, and the roles' permission lists were written from the docs and not run against AWS. Both are checked on the first run ([infra/README.md](../../infra/README.md)).

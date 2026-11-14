@@ -75,8 +75,11 @@ jobs:
             echo "::endgroup::"
           done
 
-  # What would the foundation and app stacks change? Shown in the job summary of the run.
-  # Uses the read-only plan role (infra/bootstrap), so it can look but not change anything.
+  # What would the app stack change? Shown in the job summary of the run. Uses the read-only
+  # plan role (infra/bootstrap), so it can look but not change anything.
+  #
+  # There is no foundation plan here: refreshing it would decrypt the database password, and
+  # any pull request can use this role. Plan the foundation yourself before applying it.
   # Skipped, with a note, until the AWS_PLAN_ROLE_ARN variable is set (see infra/README.md),
   # and for pull requests from forks, which GitHub gives no token to sign in to AWS.
   plan:
@@ -119,25 +122,11 @@ jobs:
         run: |
           : "${AWS_REGION:?Set the AWS_REGION repository variable}"
           : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable}"
+          # The foundation is initialised only to read its outputs; it is not planned.
           for stack in foundation app; do
             terraform -chdir="infra/$stack" init -input=false \
               -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION"
           done
-      # -lock=false: the plan role can't write, and taking the state lock writes a file. A plan
-      # changes nothing, so it doesn't need the lock.
-      - name: Plan foundation
-        if: env.PLAN_ROLE != ''
-        run: |
-          terraform -chdir=infra/foundation plan -input=false -lock=false -no-color | tee plan.txt
-          {
-            echo "### Terraform plan: foundation"
-            echo
-            echo "You apply this stack yourself, after reading this. See \"Deploy\" in infra/README.md."
-            echo
-            echo '```'
-            head -c 900000 plan.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Plan app
         if: env.PLAN_ROLE != ''
         run: |
@@ -155,6 +144,8 @@ jobs:
           # Keep the image that runs now, so that the plan shows only real changes to the
           # infrastructure. With no app deployed yet, any value will do.
           current="$(terraform -chdir=infra/app output -raw app_version 2>/dev/null || echo none)"
+          # -lock=false: the plan role can't write, and taking the state lock writes a file. A
+          # plan changes nothing, so it doesn't need the lock.
           terraform -chdir=infra/app plan -input=false -lock=false -no-color -var "app_version=$current" | tee plan.txt
           {
             echo "### Terraform plan: app"
