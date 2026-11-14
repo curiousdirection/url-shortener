@@ -12,7 +12,16 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.app.repository_url
 }
 
-# The database's address and port. It is only reachable from inside the VPC.
+# The database's writer address. It is only reachable from inside the VPC.
 output "rds_endpoint" {
-  value = aws_db_instance.main.endpoint
+  value = aws_rds_cluster.main.endpoint
+}
+
+# What the RDS Data API needs to run SQL (see "Look at the data" in README.md).
+output "db_cluster_arn" {
+  value = aws_rds_cluster.main.arn
+}
+
+output "db_secret_arn" {
+  value = aws_secretsmanager_secret.db.arn
 }

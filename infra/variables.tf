@@ -47,21 +47,27 @@ variable "max_tasks" {
 # Database
 
 variable "db_instance_class" {
-  description = "RDS machine size. db.t4g.micro is covered by the AWS free plan."
+  description = "Aurora instance size. db.serverless scales between db_min_capacity and db_max_capacity; a fixed size such as db.r7g.large does not."
   type        = string
-  default     = "db.t4g.micro"
+  default     = "db.serverless"
 }
 
-variable "db_allocated_storage" {
-  description = "GiB."
+variable "db_instances" {
+  description = "Database servers in the cluster. With 2 or more, the extra ones take over if the writer fails."
   type        = number
-  default     = 20
+  default     = 1
 }
 
-variable "db_multi_az" {
-  description = "Keep a standby copy of the database in a second availability zone for failover. Roughly doubles the cost; not allowed on the free plan."
-  type        = bool
-  default     = false
+variable "db_min_capacity" {
+  description = "Serverless only: smallest size in Aurora capacity units (ACU, about 2 GiB of memory each). 0 lets the database pause when idle; 0.5 is the smallest that never pauses."
+  type        = number
+  default     = 0
+}
+
+variable "db_max_capacity" {
+  description = "Serverless only: largest size in ACU."
+  type        = number
+  default     = 2
 }
 
 variable "db_backup_retention_days" {
