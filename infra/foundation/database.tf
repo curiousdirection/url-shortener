@@ -1,7 +1,7 @@
 # The Postgres database (Amazon RDS), its firewall and its password.
 
 # A security group is a firewall attached to a resource. This one is for the database. The only
-# rule that lets anything in is db_from_app in app.tf.
+# rule that lets anything in is db_from_app in security.tf.
 resource "aws_security_group" "db" {
   # AWS requires unique names; `name_prefix` lets AWS add a random suffix.
   name_prefix = "${var.name}-db-"
@@ -15,9 +15,11 @@ resource "aws_security_group" "db" {
   }
 }
 
-# A random 32-character password, generated once on the first apply and kept in the state.
-# Alphanumeric only, so it never needs escaping.
-resource "random_password" "db" {
+# The database password. It is generated here, on every run, and handed straight to AWS. It
+# is "ephemeral": Terraform keeps it in memory only, so it is never written to the plan, the
+# state (in S3) or the logs. Alphanumeric only, so it never needs escaping.
+#   https://developer.hashicorp.com/terraform/language/block/ephemeral
+ephemeral "random_password" "db" {
   length  = 32
   special = false
 }
@@ -26,10 +28,20 @@ resource "random_password" "db" {
 # encrypted. ECS reads it when it starts a task and passes it in as PGPASSWORD; the task
 # execution role may read this one parameter and nothing else. (An RDS-managed password
 # would rotate every 7 days, and running tasks would keep the old one.)
+#
+# `value_wo` is a write-only argument: sent to AWS, never stored in the state. Terraform
+# can't see whether it changed, so it only sends it again when `value_wo_version` changes.
 resource "aws_ssm_parameter" "db_password" {
-  name  = "/${var.name}/db_password"
-  type  = "SecureString"
-  value = random_password.db.result
+  name             = "/${var.name}/db_password"
+  type             = "SecureString"
+  value_wo         = ephemeral.random_password.db.result
+  value_wo_version = var.db_password_version
+
+  # If the database is ever replaced, it is created with a fresh password. Replace this
+  # parameter too, so that it holds the same one. (resource_id changes with a new database.)
+  lifecycle {
+    replace_triggered_by = [aws_db_instance.main.resource_id]
+  }
 }
 
 # A random suffix for the final snapshot's name. Snapshot names must be unique, so a fixed
@@ -50,7 +62,10 @@ resource "aws_db_instance" "main" {
 
   db_name  = "urlshortener"
   username = "urlshortener"
-  password = random_password.db.result
+  # The same write-only password as above. It is sent when the database is created, and again
+  # when password_wo_version changes (which also changes the parameter, so they stay equal).
+  password_wo         = ephemeral.random_password.db.result
+  password_wo_version = var.db_password_version
 
   # Disk size in GiB. gp3 is general-purpose SSD storage. Encrypted at rest.
   allocated_storage = var.db_allocated_storage
