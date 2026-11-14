@@ -26,7 +26,7 @@ CI uses two roles that only GitHub's own sign-in can assume. `github-plan-url-sh
 
 ## Prerequisites
 
-- Terraform via [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` in the repo. It must be 1.11 or newer (the database password uses write-only arguments).
+- Terraform via [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` in the repo. It must be 1.11 or newer (the database password uses write-only arguments and an ephemeral resource).
 - An AWS CLI profile that can create the resources (for the bootstrap and foundation steps, admin is simplest), Docker and git.
 - Your account's region (AWS Settings > Project). The default is `eu-north-1`; to change it, put `region = "..."` in a `terraform.tfvars` in each stack folder.
 - Everything used is on the AWS Free plan ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
@@ -125,7 +125,11 @@ If an app change needs a foundation change, apply the foundation first. The app 
 
 ## Rotate the database password
 
-The password is generated fresh on every run but only sent to AWS when `db_password_version` changes. To set a new one, raise it by one in `infra/foundation/terraform.tfvars` (or pass `-var db_password_version=2`) and apply the foundation. The database and the stored parameter get the same password in that apply.
+The password is generated fresh on every run, but it is only written to AWS when the parameter is created or `db_password_version` changes. To set a new one, raise the version by one in `infra/foundation/terraform.tfvars` (or pass `-var db_password_version=2`) and apply the foundation. Terraform writes the new password to the parameter, then reads it back and updates the database with it, in the same apply.
+
+The database never gets a password of its own: whenever it is written, it is given what the parameter holds. So the two can't differ, even if the parameter is deleted by hand or an apply stops half way. The next apply puts the database right. If you still suspect they differ (a run was killed at the wrong moment), raise the version again. The comments in `foundation/database.tf` list the cases.
+
+Applying the foundation reads the parameter, so you need `ssm:GetParameter` and `kms:Decrypt` (admin has them). CI doesn't touch it.
 
 Running tasks keep the old password, so they fail on new connections until they are replaced. Release a new commit straight after (or do it while the stack is torn down). A re-run of the same version doesn't replace the tasks.
 

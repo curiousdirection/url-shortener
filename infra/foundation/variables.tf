@@ -53,7 +53,7 @@ variable "db_apply_immediately" {
 }
 
 variable "db_password_version" {
-  description = "Rotates the database password. The password is generated fresh on each run but only sent to AWS when this number changes, so it never reaches the state. Raise it by one to set a new password (see \"Rotate the database password\" in infra/README.md)."
+  description = "Rotates the database password. The password is generated fresh on each run but only written to AWS when this number changes, so it never reaches the state. Raise it by one to set a new password; the parameter and the database get the same one (see \"Rotate the database password\" in infra/README.md)."
   type        = number
   default     = 1
 }

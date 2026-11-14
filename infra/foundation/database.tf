@@ -19,6 +19,9 @@ resource "aws_security_group" "db" {
 # is "ephemeral": Terraform keeps it in memory only, so it is never written to the plan, the
 # state (in S3) or the logs. Alphanumeric only, so it never needs escaping.
 #   https://developer.hashicorp.com/terraform/language/block/ephemeral
+#
+# Only the parameter below uses this fresh value. The database does not: it takes whatever
+# the parameter holds (see "How the two stay the same" below).
 ephemeral "random_password" "db" {
   length  = 32
   special = false
@@ -36,11 +39,68 @@ resource "aws_ssm_parameter" "db_password" {
   type             = "SecureString"
   value_wo         = ephemeral.random_password.db.result
   value_wo_version = var.db_password_version
+}
 
-  # If the database is ever replaced, it is created with a fresh password. Replace this
-  # parameter too, so that it holds the same one. (resource_id changes with a new database.)
+# How the two stay the same
+# -------------------------
+# The database and the parameter must always hold the same password. Neither can be read back
+# from the state, so Terraform can't compare them. Two rules make them equal by construction:
+#
+#   1. The parameter is the one source. It is the only place a fresh password is written.
+#   2. The database never gets a password of its own. Whenever it is written, in the same
+#      run, it is handed what the parameter holds at that moment (the block below).
+#
+# Rule 2 covers the database being created or replaced at any time: it reads the parameter,
+# so it can't start with a different password. For the other direction (the parameter being
+# written when the database is not), `terraform_data.db_password_written` below changes
+# whenever the parameter is created or written, and the database lists it as its
+# `password_wo_version`. So a new parameter always means "send the database the password
+# again". The cases:
+#
+#   - First apply: the parameter, then the marker, then the database. If it stops half way,
+#     the next apply carries on from there. The database is never made before the parameter.
+#   - Parameter deleted outside Terraform (the console, a failed destroy): the next apply
+#     creates it with a new password, replaces the marker, and updates the database to match.
+#   - Parameter changed outside Terraform: its version number changes, which replaces the
+#     marker, so the database is updated to the parameter's current value.
+#   - Database deleted or replaced: it is created with the parameter's password. The parameter
+#     is untouched, so running tasks keep working.
+#   - New password (db_password_version raised): the parameter is written, then the database.
+#
+# The one gap is a run that is killed in the few milliseconds between writing the parameter
+# and saving the marker. If you ever think they differ, raise db_password_version by one and
+# apply: that writes a new password to both (see "Rotate the database password" in
+# infra/README.md).
+#
+# Reading the parameter needs ssm:GetParameter and kms:Decrypt for the person who applies
+# the foundation. The pull request plan role is denied both on purpose; CI never plans this
+# stack.
+#   https://registry.terraform.io/providers/hashicorp/aws/latest/docs/ephemeral-resources/ssm_parameter
+ephemeral "aws_ssm_parameter" "db_password" {
+  # Using the ARN makes Terraform wait until the parameter has been written before it reads
+  # it. While the parameter doesn't exist yet the ARN is unknown, so Terraform postpones the
+  # read to the apply, after the parameter is created.
+  arn = aws_ssm_parameter.db_password.arn
+}
+
+# A marker that changes whenever the parameter is created or written, so the database knows
+# to be sent the password again. `terraform_data` is built into Terraform (no provider).
+#   - `triggers_replace`: the parameter's version number is unknown while the parameter is
+#     about to be created, which replaces the marker. It also changes when the parameter is
+#     changed outside Terraform.
+#   - `replace_triggered_by`: replaces the marker when the parameter is updated (a new
+#     db_password_version). It does not fire when the parameter is created, which is why
+#     `triggers_replace` is there too.
+#   - `input` is the time the marker was made, as a number (for example 20261114153000).
+#     `ignore_changes` stops it from changing on every plan, so it only changes when the
+#     marker is replaced. Time only goes forward, so the number is never reused.
+resource "terraform_data" "db_password_written" {
+  triggers_replace = [aws_ssm_parameter.db_password.version]
+  input            = parseint(formatdate("YYYYMMDDhhmmss", timestamp()), 10)
+
   lifecycle {
-    replace_triggered_by = [aws_db_instance.main.resource_id]
+    ignore_changes       = [input]
+    replace_triggered_by = [aws_ssm_parameter.db_password]
   }
 }
 
@@ -62,10 +122,11 @@ resource "aws_db_instance" "main" {
 
   db_name  = "urlshortener"
   username = "urlshortener"
-  # The same write-only password as above. It is sent when the database is created, and again
-  # when password_wo_version changes (which also changes the parameter, so they stay equal).
-  password_wo         = ephemeral.random_password.db.result
-  password_wo_version = var.db_password_version
+  # The password the parameter holds, read while Terraform runs. It is sent when the database
+  # is created, and again whenever the marker changes (so whenever the parameter is written).
+  # See "How the two stay the same" above.
+  password_wo         = ephemeral.aws_ssm_parameter.db_password.value
+  password_wo_version = terraform_data.db_password_written.output
 
   # Disk size in GiB. gp3 is general-purpose SSD storage. Encrypted at rest.
   allocated_storage = var.db_allocated_storage
