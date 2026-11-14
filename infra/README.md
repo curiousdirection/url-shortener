@@ -45,6 +45,33 @@ terraform apply -var app_version=<earlier commit sha>
 
 ECR keeps the last 10 images. Migrations aren't rolled back, so each must work with the previous code too.
 
+## Moving to a new cluster
+
+Older versions of this stack ran the service in the account's shared `default` ECS cluster; it now has its own, `url-shortener-cluster`. ECS can't move a service between clusters, and a plain `terraform apply` only tries to update it in place, so it fails. Replace the service once instead:
+
+```bash
+./scripts/release.sh -replace=aws_ecs_express_gateway_service.app
+```
+
+The service is deleted and created again: the URL (`terraform output -raw url`) changes, and the site is down from the delete until the new release is live, probably 15–25 minutes. Nothing else is replaced; the database keeps its data. A new setup, or one that already uses the new cluster, needs none of this.
+
+The old setup leaves `default` and its task definitions behind (free). Delete them by hand only if nothing else in the account uses `default`; both commands should print nothing:
+
+```bash
+aws ecs list-services --region eu-north-1 --cluster default --query 'serviceArns' --output text
+aws ecs list-tasks --region eu-north-1 --cluster default --query 'taskArns' --output text
+```
+
+Then:
+
+```bash
+aws ecs delete-cluster --region eu-north-1 --cluster default
+for n in 1 2 3; do aws ecs deregister-task-definition --region eu-north-1 --task-definition default-url-shortener:$n --query 'taskDefinition.status'; done
+aws ecs delete-task-definitions --region eu-north-1 --task-definitions default-url-shortener:1 default-url-shortener:2 default-url-shortener:3
+```
+
+Adjust the revision numbers to what `aws ecs list-task-definitions --region eu-north-1 --family-prefix default-url-shortener` shows.
+
 ## Tear down
 
 ```bash
@@ -58,7 +85,7 @@ aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key
 aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first can still list deleted resources for a few hours; if `terraform state list` is empty, they're stale. The second lists manual snapshots; only `url-shortener-final-*` ones are from this stack (full-scale settings keep one; delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`). An empty `default` ECS cluster may stay behind; it's free.
+The first can still list deleted resources for a few hours; if `terraform state list` is empty, they're stale. The second lists manual snapshots; only `url-shortener-final-*` ones are from this stack (full-scale settings keep one; delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`). The ECS cluster is destroyed with the rest.
 
 ## Cost
 
