@@ -294,6 +294,9 @@ resource "aws_iam_role_policy" "plan" {
         Resource = "*"
       },
       # A deny wins over any allow, so this holds even if an allow above is widened later.
+      # The kms:Decrypt deny is safe for reading the state: the state bucket uses S3-managed
+      # encryption (SSE-S3, see state.tf), which needs no KMS permission. If that bucket ever
+      # moves to a KMS key, this deny would block the state reads above.
       {
         Sid    = "NoSecrets"
         Effect = "Deny"

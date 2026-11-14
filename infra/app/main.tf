@@ -12,13 +12,13 @@
 # outputs", the foundation stack has not been applied yet: do that first (see "Deploy" in
 # ../README.md).
 #
-# The state bucket is named by ../bootstrap: <name>-tfstate-<account id>.
-data "aws_caller_identity" "current" {}
-
+# The bucket is the one this stack's own state is in. It is passed in (state_bucket), not worked
+# out here, so there is one place that says which bucket it is (the TF_STATE_BUCKET variable in
+# CI, backend.hcl and terraform.tfvars on your machine; see ../README.md).
 data "terraform_remote_state" "foundation" {
   backend = "s3"
   config = {
-    bucket = "${var.name}-tfstate-${data.aws_caller_identity.current.account_id}"
+    bucket = var.state_bucket
     key    = "foundation/terraform.tfstate"
     region = var.region
   }

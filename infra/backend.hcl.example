@@ -2,5 +2,9 @@
 # fill in the bucket from `terraform -chdir=bootstrap output state_bucket`. Then, in each stack:
 #   terraform init -backend-config=../backend.hcl
 # CI passes the same two values from the TF_STATE_BUCKET and AWS_REGION GitHub variables.
+#
+# The app stack also reads the foundation's state from this bucket, and takes the name from its
+# `state_bucket` variable. Put the same bucket in infra/app/terraform.tfvars (gitignored):
+#   state_bucket = "url-shortener-tfstate-123456789012"
 bucket = "url-shortener-tfstate-123456789012"
 region = "eu-north-1"

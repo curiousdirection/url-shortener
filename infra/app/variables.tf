@@ -1,6 +1,6 @@
 # Inputs you can change. The defaults are the practice values. To override one, put it in
 # terraform.tfvars (gitignored) or pass `-var name=value`. The database settings are in
-# ../foundation/variables.tf.
+# ../foundation/variables.tf. `state_bucket` has no default: you must set it (see below).
 
 variable "name" {
   description = "Prefix for resource names and tags. Must match the foundation stack."
@@ -14,8 +14,18 @@ variable "region" {
   default     = "eu-north-1"
 }
 
+variable "state_bucket" {
+  description = "The S3 bucket that holds the Terraform state (`terraform -chdir=infra/bootstrap output state_bucket`). Used to read the foundation stack's state. Set it to the same bucket as in backend.hcl: in infra/app/terraform.tfvars on your machine; CI sets it from the TF_STATE_BUCKET variable."
+  type        = string
+
+  validation {
+    condition     = length(var.state_bucket) > 0
+    error_message = "state_bucket must not be empty."
+  }
+}
+
 variable "app_version" {
-  description = "Image tag to run: the git short SHA (7 characters) that scripts/release.sh or the deploy workflow pushed. No default, so pass -var app_version=... on every apply and destroy (any value works for destroy)."
+  description = "Image tag to run: the first 7 characters of the git commit SHA that scripts/release.sh or the deploy workflow pushed. No default, so pass -var app_version=... on every apply and destroy (any value works for destroy)."
   type        = string
 }
 

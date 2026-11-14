@@ -7,7 +7,9 @@ data "aws_caller_identity" "current" {}
 
 locals {
   # Bucket names are global across all AWS accounts, so the account id makes it unique. The
-  # app stack builds the same name to read the foundation state (infra/app/main.tf).
+  # name is handed on through `output state_bucket`: to backend.hcl, to the `state_bucket`
+  # variable of the app stack and to the TF_STATE_BUCKET variable in GitHub. Nothing else
+  # rebuilds it.
   state_bucket = "${var.name}-tfstate-${data.aws_caller_identity.current.account_id}"
 }
 
@@ -26,7 +28,11 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
-# Encrypt at rest with the S3-managed key (no KMS permission needed by anyone).
+# Encrypt at rest with the S3-managed key (SSE-S3, "AES256"). No KMS key is involved, so
+# nobody needs KMS permission to read the state. That matters: the CI plan role is denied
+# kms:Decrypt on purpose (github.tf), and with a KMS key on this bucket that deny would stop it
+# reading the state. If you ever switch to a KMS key, the plan role needs a way to use that key
+# and no other.
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {
