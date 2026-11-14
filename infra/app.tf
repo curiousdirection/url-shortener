@@ -1,6 +1,7 @@
 # The app: a container image in ECR, run by an ECS Express Mode service.
 #
-# Express Mode creates the rest: the ECS cluster ("default"), task definition, an
+# The ECS cluster is ours (below), so it is not the account-wide "default" cluster that
+# Express Mode would otherwise use. Express Mode creates the rest: the task definition, an
 # internet-facing load balancer with HTTPS and a certificate, target group, its own security
 # groups and CPU autoscaling.
 #   https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html
@@ -106,8 +107,21 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
   to_port                      = 5432
 }
 
+# Our own cluster, not the account's shared "default" one, so destroy removes it and nothing
+# else uses it. Express Mode names the task definition family <cluster>-<service>
+# (url-shortener-cluster-url-shortener), which is why the cluster name has a suffix.
+resource "aws_ecs_cluster" "app" {
+  name = "${var.name}-cluster"
+}
+
 resource "aws_ecs_express_gateway_service" "app" {
-  service_name            = var.name
+  service_name = var.name
+
+  # Also makes destroy remove the service before the cluster. Changing this on an existing
+  # service does NOT move it: the provider updates in place and ECS can't change a service's
+  # cluster. Replace the service instead (README.md, "Moving to a new cluster").
+  cluster = aws_ecs_cluster.app.name
+
   execution_role_arn      = aws_iam_role.execution.arn
   infrastructure_role_arn = aws_iam_role.infrastructure.arn
 

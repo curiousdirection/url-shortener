@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the app image, push it to ECR and deploy it. See "Deploy" in infra/README.md.
-# Usage: infra/scripts/release.sh   (run from anywhere; needs AWS credentials and Docker)
+# Usage: infra/scripts/release.sh [terraform apply options]   (run from anywhere; needs AWS credentials and Docker)
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -33,4 +33,4 @@ else
   docker push "$REPO:$VERSION"
 fi
 
-"${tf[@]}" apply -var "app_version=$VERSION"
+"${tf[@]}" apply -var "app_version=$VERSION" "$@"
