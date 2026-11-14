@@ -127,8 +127,11 @@ resource "aws_ecs_express_gateway_service" "app" {
 
   scaling_target {
     auto_scaling_metric = "AVERAGE_CPU"
-    min_task_count      = var.min_tasks
-    max_task_count      = var.max_tasks
+    # Express Mode's default, set explicitly: left out, the provider fails after creating
+    # the service ("produced an unexpected new value").
+    auto_scaling_target_value = 60
+    min_task_count            = var.min_tasks
+    max_task_count            = var.max_tasks
   }
 
   primary_container {
