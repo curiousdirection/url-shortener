@@ -37,7 +37,7 @@ If the first deploy fails with "Unable to assume the service linked role", ECS h
 
 ## Rollback
 
-A release first gets 5% of traffic and rolls back by itself if its error alarm fires; `terraform apply` then fails. The alarm counts 4xx as well as 5xx ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)), so normal 404s could roll back a good release. To go back to an earlier release:
+A release first gets 5% of traffic and rolls back by itself if its error alarm fires; `terraform apply` then fails. The alarm adds the app's 4xx to its 5xx, ignoring fewer than 5 4xx in a check, and fires above 1% of requests ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)). A few stray 404s don't matter, but if more than 1% of real traffic is unknown codes or taken aliases, a good release rolls back. To go back to an earlier release:
 
 ```bash
 terraform apply -var app_version=<earlier commit sha>

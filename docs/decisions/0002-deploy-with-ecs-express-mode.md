@@ -10,7 +10,7 @@ AWS App Runner, the simple option, stopped accepting new customers on 2026-04-30
 
 ## Decision
 
-Deploy the app as a container on Amazon ECS Express Mode, on Fargate (Arm by default). From an image and two IAM roles, Express Mode creates the Application Load Balancer, the HTTPS certificate, CPU autoscaling and canary deployments. The same Terraform serves the practice deployment and full scale; only variable values differ. `infra/scripts/release.sh` builds the image, pushes it to ECR and runs `terraform apply`. See [infra/README.md](../../infra/README.md).
+Deploy the app as a container on Amazon ECS Express Mode, on Fargate (Arm). From an image and two IAM roles, Express Mode creates the Application Load Balancer, the HTTPS certificate, CPU autoscaling and canary deployments. The same Terraform serves the practice deployment and full scale; only variable values differ. `infra/scripts/release.sh` builds the image, pushes it to ECR and runs `terraform apply`. See [infra/README.md](../../infra/README.md).
 
 ## Why
 
@@ -21,7 +21,7 @@ Deploy the app as a container on Amazon ECS Express Mode, on Fargate (Arm by def
 ## Consequences
 
 - **It costs more at full scale**, about $2,100/month more than NLB + EC2, almost all from ALB capacity units for new connections. Express Mode only builds ALBs. See "Cost" in [infra/README.md](../../infra/README.md).
-- **The deploy check can roll back a healthy release.** Express Mode's alarm counts 4xx as well as 5xx and rolls back above 1%. It can't be changed through Express Mode or Terraform, so a burst of normal 404s during a canary could roll back a good release. See "Rollback" in [infra/README.md](../../infra/README.md).
+- **The deploy check can roll back a healthy release.** Express Mode's alarm adds the app's 4xx to its 5xx (ignoring fewer than 5 4xx in a check) and rolls back above 1% of requests. It can't be changed through Express Mode or Terraform, so if more than 1% of real traffic gets normal 404s or 409s, a good release rolls back. See "Rollback" in [infra/README.md](../../infra/README.md).
 - **The practice deployment no longer mirrors the cheaper full-scale design.** It runs the ALB design, not NLB + EC2.
 - **Migrations still run inside the VPC on every start.** They now run in the container's start command (`node dist/migrate.js && exec node dist/server.js`) instead of a boot script. The reasoning in [0001](0001-run-migrations-on-every-instance.md) still holds, with tasks in place of servers.
 
