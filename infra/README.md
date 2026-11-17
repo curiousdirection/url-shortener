@@ -80,7 +80,9 @@ If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"),
 
 ## Deploy
 
-**Normal case.** Merge to `main`. CI runs the tests and checks. If they pass and the push changed the app, its build files or `infra/app/` (the full list is in the `changes` job of `.github/workflows/ci.yml`), CI then runs the deploy: build and push the image (tagged with the first 7 characters of the commit SHA), apply the app stack and check `/health`. One deploy runs at a time. If the stack is torn down, the deploy ends green and changes nothing.
+**Normal case.** Merge to `main`. CI runs the tests and checks. If they pass and the push changed the app, its build files or `infra/app/` (the full list is in `infra/scripts/app-changed.sh`), CI then runs the deploy: build and push the image (tagged with the first 7 characters of the commit SHA), apply the app stack and check `/health`. One deploy runs at a time. If the stack is torn down, the deploy ends green and changes nothing.
+
+`infra/scripts/check-terraform.sh` runs the same Terraform checks as CI, if you want them before pushing.
 
 **From your machine.** Commit, then run `infra/scripts/release.sh`. It does the same, and asks you to confirm the apply. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
 

@@ -1,11 +1,7 @@
-# Checks on every pull request and every push to main: the tests, the build and the Terraform
-# files, plus (on pull requests) what the app stack would change. On main, when the checks
-# pass and the app changed, it then deploys (deploy.yml).
-#
-# Every action is pinned to a full commit SHA (a tag can be moved; a SHA can't), with its
-# version in the comment. To update one, look up the new tag's commit with
-#   git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'
-# (use the line ending in ^{} if there is one), change both, and check the run.
+# Checks on every pull request and every push to main: tests, build and Terraform files, plus
+# the app plan on pull requests. On main, when the checks pass and the app changed, it then
+# deploys (deploy.yml). Actions are pinned to commit SHAs; update the SHA and the version
+# comment together (`git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'`).
 name: CI
 
 on:
@@ -23,11 +19,9 @@ concurrency:
 
 defaults:
   run:
-    # Makes `a | b` fail if `a` fails, and `set -e` apply to every step.
     shell: bash
 
 jobs:
-  # The tests and the build.
   test:
     uses: ./.github/workflows/test.yml
 
@@ -37,39 +31,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-terraform
-      - name: Format
-        run: terraform fmt -check -recursive -diff infra
-      - name: Validate
-        # -backend=false: check the files only, without reaching the state in S3.
-        run: |
-          for stack in bootstrap foundation app; do
-            echo "::group::$stack"
-            terraform -chdir="infra/$stack" init -backend=false -input=false
-            terraform -chdir="infra/$stack" validate
-            echo "::endgroup::"
-          done
+      - run: infra/scripts/check-terraform.sh
 
-  # What would the app stack change? Shown in the job summary of the run. Uses the read-only
-  # plan role (infra/bootstrap), so it can look but not change anything.
-  #
-  # There is no foundation plan here: refreshing it would decrypt the database password, and
-  # any pull request can use this role. Plan the foundation yourself before applying it.
-  #
-  # Runs when the AWS_PLAN_ROLE_ARN variable is set (see infra/README.md; `plan-skipped`
-  # below says so when it is not), and not for pull requests from forks, which GitHub gives no
-  # token to sign in to AWS.
+  # What would merging change in the app stack? Uses the read-only plan role. There is no
+  # foundation plan: refreshing it would decrypt the database password. Forks get no AWS token.
   plan:
     if: github.event.pull_request.head.repo.full_name == github.repository && vars.AWS_PLAN_ROLE_ARN != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write # lets the job ask GitHub for the token that AWS checks
+      id-token: write
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      # The app stack reads the foundation state from the same bucket (state_bucket in
-      # infra/app/variables.tf).
       TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,60 +53,9 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
-      # The app stack reads the foundation outputs. If the foundation was never applied, or is
-      # torn down, there are none, and a plan could only fail. Look at the foundation's state
-      # file directly (the plan role may read it), instead of setting the whole stack up.
-      #
-      # Only "there is no such file" and "the file has no outputs" mean "not applied". Anything
-      # else (no access, wrong bucket, a file that isn't state) fails the job with its message.
-      - name: Check that the foundation is applied
-        id: foundation
-        run: |
-          : "${AWS_REGION:?Set the AWS_REGION repository variable}"
-          : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable}"
-          state="$RUNNER_TEMP/foundation.tfstate"
-          if aws s3api get-object --bucket "$TF_STATE_BUCKET" --key foundation/terraform.tfstate "$state" >/dev/null 2>"$RUNNER_TEMP/err.txt"; then
-            # jq fails (and so does this step) if the file is not valid JSON.
-            outputs="$(jq '(.outputs // {}) | length' "$state")"
-          elif grep -q NoSuchKey "$RUNNER_TEMP/err.txt"; then
-            outputs=0
-          else
-            cat "$RUNNER_TEMP/err.txt" >&2
-            exit 1
-          fi
-          if [ "$outputs" -gt 0 ]; then
-            echo "applied=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "applied=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Terraform plan: app"
-              echo
-              echo "Skipped: the foundation stack has no outputs, so it is not applied (or is torn down)."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Plan app
-        if: steps.foundation.outputs.applied == 'true'
-        run: |
-          terraform -chdir=infra/app init -input=false \
-            -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION"
-          # Keep the image that runs now, so that the plan shows only real changes to the
-          # infrastructure. With no app deployed yet, any value will do. (`output -json` prints
-          # {} for an empty state, and fails on any real error.)
-          current="$(terraform -chdir=infra/app output -json | jq -r '.app_version.value // "none"')"
-          # -lock=false: the plan role can't write, and taking the state lock writes a file. A
-          # plan changes nothing, so it doesn't need the lock.
-          terraform -chdir=infra/app plan -input=false -lock=false -no-color -var "app_version=$current" | tee plan.txt
-          {
-            echo "### Terraform plan: app"
-            echo
-            echo "CI applies this stack after the pull request is merged (the deploy job in ci.yml)."
-            echo
-            echo '```'
-            head -c 900000 plan.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+      - run: |
+          infra/scripts/plan-app.sh | tee plan.txt
+          { echo '### Terraform plan: app'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   # Says why there is no plan, when the variable is not set yet.
   plan-skipped:
@@ -140,14 +64,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: |
-          {
-            echo "### Terraform plan: skipped"
-            echo
-            echo "The \`AWS_PLAN_ROLE_ARN\` variable is not set, so there is no plan. See \"Set up and first run\" in infra/README.md."
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "### Terraform plan: skipped. Set the \`AWS_PLAN_ROLE_ARN\` variable (see \"Set up and first run\" in infra/README.md)." >> "$GITHUB_STEP_SUMMARY"
 
-  # On main: did this push change anything that goes into the image or the app stack? Docs or
-  # tests alone don't deploy.
+  # On main: did this push change anything that goes into the app? Docs or tests alone don't
+  # deploy.
   changes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -162,14 +82,9 @@ jobs:
         env:
           BEFORE: ${{ github.event.before }}
         run: |
-          app='^(src/|migrations/|infra/app/|\.github/actions/setup-terraform/|package\.json$|package-lock\.json$|tsconfig\.json$|Dockerfile$|\.dockerignore$|\.node-version$|\.terraform-version$|infra/scripts/push-image\.sh$|\.github/workflows/(deploy|test)\.yml$)'
-          # If the previous commit is unknown (first push, force push), deploy to be safe.
-          if files="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" 2>/dev/null)" && ! grep -qE "$app" <<<"$files"; then
-            echo "app=false" >> "$GITHUB_OUTPUT"
-            echo "### No deploy: nothing in this push goes into the app." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "app=true" >> "$GITHUB_OUTPUT"
-          fi
+          app="$(infra/scripts/app-changed.sh "$BEFORE" "$GITHUB_SHA")"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          if [ "$app" = false ]; then echo "### No deploy: nothing in this push goes into the app." >> "$GITHUB_STEP_SUMMARY"; fi
 
   deploy:
     needs: [test, terraform-check, changes]
