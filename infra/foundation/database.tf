@@ -34,18 +34,15 @@ resource "aws_ssm_parameter" "db_password" {
   value_wo_version = var.db_password_version
 }
 
-# The database never gets a password of its own: it is always given what the parameter holds,
-# read back here. So a new or replaced database matches the parameter, and the marker below
-# makes sure the database is updated whenever the parameter is written. The one gap is a run
-# killed between those two writes; raising db_password_version fixes it. Reading the
-# parameter needs ssm:GetParameter and kms:Decrypt, which is why CI never plans this stack.
+# Reads the password back from the parameter, so the database always gets the same one.
+# Needs ssm:GetParameter and kms:Decrypt, so CI never plans this stack.
 ephemeral "aws_ssm_parameter" "db_password" {
   arn = aws_ssm_parameter.db_password.arn
 }
 
-# Replaced whenever the parameter is created or written (`triggers_replace` catches creation,
-# `replace_triggered_by` catches updates). Its output, a timestamp, is the database's
-# `password_wo_version`, so a new value means "send the database the password again".
+# Changes whenever the parameter is written. The database uses it as its
+# password_wo_version, so it gets the password again each time. (If a run dies between the
+# two writes, raise db_password_version.)
 resource "terraform_data" "db_password_written" {
   triggers_replace = [aws_ssm_parameter.db_password.version]
   input            = parseint(formatdate("YYYYMMDDhhmmss", timestamp()), 10)
