@@ -34,8 +34,7 @@ locals {
 
 # Only what the image push and `terraform apply` in infra/app need. It can update the service
 # but not create or delete it, so a change that would replace the service fails in CI instead
-# of taking the app down. Not yet run against a real account: add any action the first run
-# is refused.
+# of taking the app down.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id

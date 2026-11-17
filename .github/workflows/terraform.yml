@@ -23,8 +23,7 @@ jobs:
       - uses: ./.github/actions/setup-terraform
       - run: infra/scripts/check-terraform.sh
 
-  # What would this commit change in the app stack? Uses the read-only plan role. There is no
-  # foundation plan: refreshing it would decrypt the database password.
+  # What would this commit change in the app stack? Uses the read-only plan role.
   plan:
     if: vars.AWS_PLAN_ROLE_ARN != ''
     runs-on: ubuntu-latest

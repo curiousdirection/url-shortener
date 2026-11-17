@@ -18,7 +18,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 | `foundation/` | The VPC, the database and its password, security groups, the ECS roles | You, from your machine |
 | `app/` | ECR, the log group, the ECS Express service | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
-All three states are in the S3 bucket, versioned, and hold no secrets.
+All three states are in the S3 bucket.
 
 ## Prerequisites
 

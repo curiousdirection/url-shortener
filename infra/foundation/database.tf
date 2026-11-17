@@ -35,7 +35,7 @@ resource "aws_ssm_parameter" "db_password" {
 }
 
 # Reads the password back from the parameter, so the database always gets the same one.
-# Needs ssm:GetParameter and kms:Decrypt, so CI never plans this stack.
+# Needs ssm:GetParameter and kms:Decrypt.
 ephemeral "aws_ssm_parameter" "db_password" {
   arn = aws_ssm_parameter.db_password.arn
 }

@@ -1,6 +1,8 @@
 # Checks every push to every branch: tests and build (test.yml), Terraform checks and the app
-# plan (terraform.yml). When CI passes on main, deploy.yml starts. Actions are pinned to commit SHAs; update the SHA and the version
-# comment together (`git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'`).
+# plan (terraform.yml). When CI passes on main, deploy.yml starts.
+#
+# All workflows pin actions to commit SHAs. To update one, change the SHA and the version
+# comment together: git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'
 name: CI
 
 on:

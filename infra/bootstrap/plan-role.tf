@@ -18,9 +18,8 @@ resource "aws_iam_role" "plan" {
   })
 }
 
-# Read-only, enough to plan infra/app. It can't write, so CI plans with -lock=false. It is
-# denied every secret: any branch can use it, which is also why CI never plans the
-# foundation (refreshing it would decrypt the database password).
+# Read-only, enough to plan infra/app. It can't write, so CI plans with -lock=false. Any branch
+# can use it, so it is denied every secret.
 resource "aws_iam_role_policy" "plan" {
   name = "plan-read-only"
   role = aws_iam_role.plan.id

@@ -1,7 +1,5 @@
 # Deploys the app: build and push the image, apply infra/app, check /health. Starts when CI
-# has passed for a push to main; run it by hand with app_version to roll back. The foundation
-# is applied by a person. See "Deploy" in infra/README.md. Actions are pinned to commit SHAs
-# (see ci.yml).
+# has passed on main; run it by hand with app_version to roll back.
 name: Deploy
 
 on:
@@ -57,7 +55,7 @@ jobs:
       # The two steps below end the deploy early, changing nothing (the run stays green). Each
       # sets SKIP, and every later step only runs while SKIP is unset.
 
-      # CI never recreates a torn-down stack: that's release.sh, so a stray push can't start a bill.
+      # CI never recreates a torn-down stack; release.sh does.
       - name: Skip if the app is torn down
         run: |
           if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then

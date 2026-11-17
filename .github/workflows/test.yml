@@ -3,8 +3,6 @@
 #
 # It needs nothing but to read the code. It has no permission to sign in to AWS (no
 # `id-token`), so the code and packages it runs can't get AWS credentials.
-#
-# Every action is pinned to a full commit SHA, with its version in the comment (see ci.yml).
 name: Test
 
 on:

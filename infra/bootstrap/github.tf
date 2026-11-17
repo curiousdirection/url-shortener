@@ -23,9 +23,7 @@ data "aws_iam_openid_connect_provider" "github" {
 locals {
   oidc_provider_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
 
-  # The start of the token's `sub` claim. Repositories created or renamed after 15 July 2026
-  # use an ID-based form; see github_oidc_sub_prefix.
-  #   https://docs.github.com/en/actions/reference/security/oidc
+  # The start of the token's `sub` claim; see github_oidc_sub_prefix.
   sub_repo = var.github_oidc_sub_prefix != "" ? var.github_oidc_sub_prefix : "repo:${var.github_repository}"
 
   account_id       = data.aws_caller_identity.current.account_id

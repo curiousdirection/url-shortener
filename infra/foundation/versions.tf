@@ -1,5 +1,4 @@
-# The foundation stack: network, database, ECS roles, password. CI never plans or applies it;
-# you do, from your machine. See docs/decisions/0003.
+# The foundation stack: network, database, ECS roles, password. See docs/decisions/0003.
 
 terraform {
   # Write-only arguments (the database password) need 1.11.

@@ -1,7 +1,6 @@
 # The S3 bucket that holds the Terraform state of all three stacks, one file each
-# (bootstrap/, foundation/ and app/terraform.tfstate). With no secrets in the state
-# (see "No password in state" in docs/decisions/0003), it is still worth
-# protecting: whoever can write the state can change what Terraform builds.
+# (bootstrap/, foundation/ and app/terraform.tfstate). Whoever can write the state can change
+# what Terraform builds, so it is locked down.
 
 data "aws_caller_identity" "current" {}
 
@@ -28,11 +27,8 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
-# Encrypt at rest with the S3-managed key (SSE-S3, "AES256"). No KMS key is involved, so
-# nobody needs KMS permission to read the state. That matters: the CI plan role is denied
-# kms:Decrypt on purpose (plan-role.tf), and with a KMS key on this bucket that deny would stop it
-# reading the state. If you ever switch to a KMS key, the plan role needs a way to use that key
-# and no other.
+# Encrypt at rest with the S3-managed key (SSE-S3). Keep it: see the kms:Decrypt deny in
+# plan-role.tf.
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {
