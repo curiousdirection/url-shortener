@@ -51,12 +51,12 @@ Do these once, in order, on a commit that is on `main`.
 
 3. **Set up GitHub.** Under Settings > Environments, create `production` and limit its deployment branches to `main`. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
 
-   | Variable | Value | Where |
-   | --- | --- | --- |
-   | `AWS_REGION` | `eu-north-1` | Repository |
-   | `TF_STATE_BUCKET` | `state_bucket` output | Repository |
-   | `AWS_PLAN_ROLE_ARN` | `plan_role_arn` output | Repository |
-   | `AWS_DEPLOY_ROLE_ARN` | `deploy_role_arn` output | Environment `production` |
+```bash
+gh variable set AWS_REGION --body eu-north-1
+gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap output -raw state_bucket)"
+gh variable set AWS_PLAN_ROLE_ARN --body "$(terraform -chdir=infra/bootstrap output -raw plan_role_arn)"
+gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=infra/bootstrap output -raw deploy_role_arn)"
+```
 
 4. **Create the CI access keys.** The bootstrap made one IAM user per role but no keys, so they stay out of the state. Make each key and store it as a GitHub secret (`gh` and `jq` are used here; the secrets can also be added in Settings). The deploy keys go to the `production` environment from step 3, so only `main` can use them; the plan keys go to the repository.
 
