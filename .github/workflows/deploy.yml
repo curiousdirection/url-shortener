@@ -26,8 +26,8 @@ defaults:
 
 jobs:
   release:
-    # After CI passed for a push to main (not a failed or cancelled run), or by hand.
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # After CI passed on main (not a failed or cancelled run), or by hand.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     # One deploy at a time. A new one waits rather than cancelling a running apply; a newer
     # one replaces one that is still waiting.
     concurrency:

@@ -1,5 +1,5 @@
-# The Terraform checks: formatting and validate for all three stacks, and on pull requests the
-# app plan with the read-only plan role. Not run on its own: ci.yml calls it.
+# The Terraform checks: formatting and validate for all three stacks, and the app plan with the
+# read-only plan role. Not run on its own: ci.yml calls it on every push.
 name: Terraform
 
 on:
@@ -23,10 +23,10 @@ jobs:
       - uses: ./.github/actions/setup-terraform
       - run: infra/scripts/check-terraform.sh
 
-  # What would merging change in the app stack? Uses the read-only plan role. There is no
-  # foundation plan: refreshing it would decrypt the database password. Forks get no AWS token.
+  # What would this commit change in the app stack? Uses the read-only plan role. There is no
+  # foundation plan: refreshing it would decrypt the database password.
   plan:
-    if: github.event.pull_request.head.repo.full_name == github.repository && vars.AWS_PLAN_ROLE_ARN != ''
+    if: vars.AWS_PLAN_ROLE_ARN != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

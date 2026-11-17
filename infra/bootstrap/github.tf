@@ -3,7 +3,7 @@
 #   https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 #
 # Two roles: the deploy role (deploy-role.tf) applies infra/app; the plan role (plan-role.tf)
-# is read-only, for pull requests. Neither can change IAM or this stack.
+# is read-only, for CI on any branch. Neither can change IAM or this stack.
 
 # An AWS account can only have one provider for GitHub. If yours already has one, set
 # create_github_oidc_provider = false and it is looked up instead.

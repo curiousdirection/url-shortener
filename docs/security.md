@@ -7,9 +7,9 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 ### Access to AWS
 
 - **No stored keys.** GitHub Actions signs in with OIDC and gets credentials that expire within an hour ([ADR 0003](decisions/0003-split-stacks-remote-state-and-ci-deploys.md)).
-- **Narrow trust.** The deploy role can only be assumed by this repository's `production` environment on `main`. The plan role can only be assumed by pull requests from this repository; forks get no token.
+- **Narrow trust.** The deploy role can only be assumed by this repository's `production` environment on `main`. The plan role can only be assumed by CI runs on this repository's branches.
 - **Least privilege.** The deploy role can push images and update the one ECS service, and pass the two ECS roles to ECS. The plan role is read-only and only plans `infra/app`. Neither role can change IAM, the network, the database or the bootstrap stack (`infra/bootstrap/deploy-role.tf`, `plan-role.tf`).
-- **No secrets for pull requests.** The plan role is explicitly denied SSM parameter reads, KMS decryption and Secrets Manager values, so a pull request can't read the database password.
+- **No secrets for branches.** The plan role is explicitly denied SSM parameter reads, KMS decryption and Secrets Manager values, so code pushed to a branch can't read the database password.
 - **Workflow permissions.** Workflows get a read-only `GITHUB_TOKEN`. Only the jobs that sign in to AWS may request an OIDC token; the test job, which runs npm packages, can't.
 - **Infra changes need a person.** CI never plans or applies `infra/foundation` or `infra/bootstrap`.
 

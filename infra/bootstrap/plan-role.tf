@@ -1,4 +1,4 @@
-# The plan role, used by .github/workflows/ci.yml to plan infra/app on pull requests.
+# The plan role, used by CI (.github/workflows/terraform.yml) to plan infra/app on every push.
 
 resource "aws_iam_role" "plan" {
   name = "github-plan-${var.name}"
@@ -10,18 +10,16 @@ resource "aws_iam_role" "plan" {
       Principal = { Federated = local.oidc_provider_arn }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
-        StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          # Any pull request in this repository. Pull requests from forks get no token.
-          "token.actions.githubusercontent.com:sub" = "${local.sub_repo}:pull_request"
-        }
+        StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
+        # A push to any branch of this repository.
+        StringLike = { "token.actions.githubusercontent.com:sub" = "${local.sub_repo}:ref:refs/heads/*" }
       }
     }]
   })
 }
 
 # Read-only, enough to plan infra/app. It can't write, so CI plans with -lock=false. It is
-# denied every secret: any pull request can use it, which is also why CI never plans the
+# denied every secret: any branch can use it, which is also why CI never plans the
 # foundation (refreshing it would decrypt the database password).
 resource "aws_iam_role_policy" "plan" {
   name = "plan-read-only"

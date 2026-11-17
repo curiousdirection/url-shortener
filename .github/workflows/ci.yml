@@ -1,13 +1,10 @@
-# Checks on every pull request and every push to main: tests and build (test.yml), Terraform
-# checks plus the app plan on pull requests (terraform.yml). When CI passes on main,
-# deploy.yml starts. Actions are pinned to commit SHAs; update the SHA and the version
+# Checks every push to every branch: tests and build (test.yml), Terraform checks and the app
+# plan (terraform.yml). When CI passes on main, deploy.yml starts. Actions are pinned to commit SHAs; update the SHA and the version
 # comment together (`git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'`).
 name: CI
 
 on:
-  pull_request:
   push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -26,7 +23,7 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
 
-  # Terraform checks, and the app plan on pull requests (terraform.yml).
+  # Terraform checks and the app plan (terraform.yml).
   terraform:
     permissions:
       contents: read

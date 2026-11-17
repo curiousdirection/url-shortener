@@ -12,7 +12,7 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.app.repository_url
 }
 
-# The image tag that is deployed now. The pull request plan reuses it, so that the plan only
+# The image tag that is deployed now. CI's plan reuses it, so that the plan only
 # shows real changes to the infrastructure and not a new image.
 output "app_version" {
   value = var.app_version

@@ -14,7 +14,7 @@ We want a push to `main` to ship the app. CI can't use a local state file and sh
 - **State in S3**, encrypted, versioned, private, with S3 native locking. The bootstrap's own state starts local, because the bucket doesn't exist yet, and moves into the bucket after the first apply.
 - **No password in state.** It is generated as an ephemeral value and sent with write-only arguments, so it never reaches the plan, the state or the logs.
 - **CI applies only the app stack**, on a push to `main` that changes the app. You plan and apply the foundation from your machine.
-- **GitHub signs in with OIDC, with two roles.** The deploy role is limited to the `production` environment on `main` and can only push images and update the one service. The plan role is for pull requests, is read-only, plans only the app stack and is denied every secret.
+- **GitHub signs in with OIDC, with two roles.** The deploy role is limited to the `production` environment on `main` and can only push images and update the one service. The plan role is for CI on any branch, is read-only, plans only the app stack and is denied every secret.
 
 How each part works is in the code comments and [infra/README.md](../../infra/README.md).
 
@@ -29,7 +29,7 @@ How each part works is in the code comments and [infra/README.md](../../infra/RE
 
 - **The foundation is applied by hand.** If an app change needs a foundation change, apply the foundation before merging.
 - **CI won't recreate a torn-down stack.** A push then ends green with a note; bringing the stack back is `release.sh`, so a stray push can't start a bill.
-- **No foundation plan on pull requests.** Refreshing it would decrypt the password, and any pull request can use the plan role.
+- **No foundation plan in CI.** Refreshing it would decrypt the password, and any branch can use the plan role.
 - **Rotating the password causes a short outage**, because running tasks read it once at start. See "Rotate the database password" in [infra/README.md](../../infra/README.md).
 - **One AWS account holds everything**, so the roles' limits are the only wall between CI and the rest of the account.
 
