@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Prints "true" if the commits between <before> and <after> change anything that goes into
-# the image or the app stack, "false" if not (docs or tests alone). CI deploys on "true".
-# Usage: infra/scripts/app-changed.sh <before sha> <after sha>
+# Prints "true" if the commits between <from> and <to> change anything that goes into the
+# image or the app stack, "false" if not (docs or tests alone). The deploy workflow compares
+# the deployed commit with the new one and deploys on "true".
+# Usage: infra/scripts/app-changed.sh <from commit> <to commit>
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -14,7 +15,7 @@ APP_PATHS=(
   .github/workflows/deploy.yml .github/workflows/test.yml
 )
 
-# If the previous commit is unknown (first push, force push), deploy to be safe.
+# If <from> is unknown (not in this history), deploy to be safe.
 if ! files="$(git diff --name-only "$1" "$2" 2>/dev/null)"; then
   echo true
   exit 0

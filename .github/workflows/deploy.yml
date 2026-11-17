@@ -1,11 +1,14 @@
-# Deploys the app: build and push the image, apply infra/app, check /health. CI calls it
-# after its checks pass on main (see the deploy job in ci.yml); run it by hand with
-# app_version to roll back. The foundation is applied by a person. See "Deploy" in
-# infra/README.md. Actions are pinned to commit SHAs (see ci.yml).
+# Deploys the app: build and push the image, apply infra/app, check /health. Starts when CI
+# has passed for a push to main; run it by hand with app_version to roll back. The foundation
+# is applied by a person. See "Deploy" in infra/README.md. Actions are pinned to commit SHAs
+# (see ci.yml).
 name: Deploy
 
 on:
-  workflow_call:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       app_version:
@@ -23,7 +26,10 @@ defaults:
 
 jobs:
   release:
-    # One deploy at a time. A new one waits rather than cancelling a running apply.
+    # After CI passed for a push to main (not a failed or cancelled run), or by hand.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # One deploy at a time. A new one waits rather than cancelling a running apply; a newer
+    # one replaces one that is still waiting.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -40,32 +46,39 @@ jobs:
       ROLLBACK_TO: ${{ inputs.app_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }} # the commit CI tested
+          fetch-depth: 0 # to compare with the deployed commit
 
       - uses: ./.github/actions/setup-terraform
         with:
           role: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
 
-      # CI only updates a running service. If the stack is torn down, stop green instead of
-      # recreating it from a stray push.
-      - name: Check that the app is deployed
+      # Stop green, changing nothing, if the stack is torn down (CI never recreates it), or if
+      # nothing that goes into the app changed since the deployed commit (docs or tests alone).
+      - name: Check whether to deploy
         id: gate
         run: |
           if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
             grep -q "No state file was found" err.txt || { cat err.txt >&2; exit 1; }
             list=""
           fi
-          if grep -qx 'aws_ecs_express_gateway_service.app' <<<"$list"; then
-            echo "deployed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "deployed=false" >> "$GITHUB_OUTPUT"
+          if ! grep -qx 'aws_ecs_express_gateway_service.app' <<<"$list"; then
+            echo "go=false" >> "$GITHUB_OUTPUT"
             echo "### Deploy skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$ROLLBACK_TO" ] && deployed="$(terraform -chdir=infra/app output -raw app_version)" &&
+               [ "$(infra/scripts/app-changed.sh "$deployed" HEAD)" = false ]; then
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
           fi
 
       # Tag: the first 7 characters of the commit SHA, as in release.sh, so either can reuse the
       # other's image.
       - name: Build and push the image
         id: image
-        if: steps.gate.outputs.deployed == 'true'
+        if: steps.gate.outputs.go == 'true'
         run: |
           repo="$(terraform -chdir=infra/app output -raw ecr_repository_url)"
           sha="$(git rev-parse HEAD)"
@@ -76,7 +89,7 @@ jobs:
       # Apply exactly the saved plan. The apply waits for the release to go live; if Express
       # Mode's canary rolls it back, this step fails. -lock-timeout waits for a local release.sh.
       - name: Plan and apply
-        if: steps.gate.outputs.deployed == 'true'
+        if: steps.gate.outputs.go == 'true'
         env:
           TAG: ${{ steps.image.outputs.tag }}
         run: |
@@ -86,7 +99,7 @@ jobs:
           terraform -chdir=infra/app apply -input=false -lock-timeout=10m tfplan
 
       - name: Check /health
-        if: steps.gate.outputs.deployed == 'true'
+        if: steps.gate.outputs.go == 'true'
         env:
           TAG: ${{ steps.image.outputs.tag }}
         run: |

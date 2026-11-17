@@ -1,7 +1,7 @@
 # Checks on every pull request and every push to main: tests and build (test.yml), Terraform
-# checks plus the app plan on pull requests (terraform.yml). On main, when they pass and the
-# app changed, it then deploys (deploy.yml). Actions are pinned to commit SHAs; update the SHA
-# and the version comment together (`git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'`).
+# checks plus the app plan on pull requests (terraform.yml). When CI passes on main,
+# deploy.yml starts. Actions are pinned to commit SHAs; update the SHA and the version
+# comment together (`git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'`).
 name: CI
 
 on:
@@ -12,11 +12,11 @@ on:
 permissions:
   contents: read
 
-# One run per branch at a time, in push order. A newer push replaces a run that is still
-# waiting, so the newest commit always runs (and on main, deploys) last.
+# One run per branch: a new push cancels the run in progress. Safe, because deploying is a
+# separate workflow (deploy.yml) that starts after CI.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -32,31 +32,3 @@ jobs:
       contents: read
       id-token: write # only terraform.yml's plan job uses it
     uses: ./.github/workflows/terraform.yml
-
-  # On main: did this push change anything that goes into the app? Docs or tests alone don't
-  # deploy.
-  changes:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      app: ${{ steps.diff.outputs.app }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - id: diff
-        env:
-          BEFORE: ${{ github.event.before }}
-        run: |
-          app="$(infra/scripts/app-changed.sh "$BEFORE" "$GITHUB_SHA")"
-          echo "app=$app" >> "$GITHUB_OUTPUT"
-          if [ "$app" = false ]; then echo "### No deploy: nothing in this push goes into the app." >> "$GITHUB_STEP_SUMMARY"; fi
-
-  deploy:
-    needs: [test, terraform, changes]
-    if: needs.changes.outputs.app == 'true'
-    permissions:
-      contents: read
-      id-token: write # passed on to deploy.yml's release job
-    uses: ./.github/workflows/deploy.yml
