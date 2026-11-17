@@ -80,7 +80,7 @@ If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"),
 
 ## Deploy
 
-**Normal case.** Merge to `main`. A change to the app, its build files or `infra/app/` (the full list is under `paths` in `.github/workflows/deploy.yml`) runs the tests, builds and pushes the image (tagged with the first 7 characters of the commit SHA), applies the app stack and checks `/health`. One deploy runs at a time. If the stack is torn down, the run ends green and changes nothing.
+**Normal case.** Merge to `main`. CI runs the tests and checks. If they pass and the push changed the app, its build files or `infra/app/` (the full list is in the `changes` job of `.github/workflows/ci.yml`), CI then runs the deploy: build and push the image (tagged with the first 7 characters of the commit SHA), apply the app stack and check `/health`. One deploy runs at a time. If the stack is torn down, the deploy ends green and changes nothing.
 
 **From your machine.** Commit, then run `infra/scripts/release.sh`. It does the same, and asks you to confirm the apply. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
 

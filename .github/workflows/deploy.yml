@@ -1,38 +1,17 @@
-# Deploys the app on push to main: tests, build and push the image, apply infra/app.
-# Only the app stack is applied here; the foundation is applied by a person.
-# See "Deploy" in infra/README.md. Actions are pinned to commit SHAs (see ci.yml).
+# Deploys the app: build and push the image, apply infra/app, check /health. CI calls it
+# after its checks pass on main (see the deploy job in ci.yml); run it by hand with
+# app_version to roll back. The foundation is applied by a person. See "Deploy" in
+# infra/README.md. Actions are pinned to commit SHAs (see ci.yml).
 name: Deploy
 
 on:
-  push:
-    branches: [main]
-    # Only what goes into the image or the app stack. Docs or tests alone don't deploy.
-    paths:
-      - src/**
-      - migrations/**
-      - package.json
-      - package-lock.json
-      - tsconfig.json
-      - Dockerfile
-      - .dockerignore
-      - .node-version
-      - .terraform-version
-      - infra/app/**
-      - infra/scripts/push-image.sh
-      - .github/workflows/deploy.yml
-      - .github/workflows/test.yml
-      - .github/actions/setup-terraform/**
+  workflow_call:
   workflow_dispatch:
     inputs:
       app_version:
-        description: "Existing image tag to roll back to (the first 7 characters of the commit SHA). Skips the tests and the build."
+        description: "Existing image tag to roll back to (the first 7 characters of the commit SHA). Skips the build."
         required: false
         type: string
-
-# One deploy at a time. A new push waits rather than cancelling a running apply.
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
 
 # Read-only by default. Only the release job can get AWS credentials.
 permissions:
@@ -43,14 +22,11 @@ defaults:
     shell: bash
 
 jobs:
-  test:
-    if: inputs.app_version == '' # a rollback doesn't wait for the latest commit's tests
-    uses: ./.github/workflows/test.yml
-
   release:
-    needs: test
-    # After passing tests, or when they were skipped for a rollback.
-    if: ${{ !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    # One deploy at a time. A new one waits rather than cancelling a running apply.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     runs-on: ubuntu-24.04-arm # builds the arm64 image natively
     environment: production # only main can use it, and only it can assume the deploy role
     permissions:

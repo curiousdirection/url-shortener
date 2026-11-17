@@ -1,5 +1,6 @@
 # Checks on every pull request and every push to main: the tests, the build and the Terraform
-# files, plus (on pull requests) what the app stack would change. Nothing here changes AWS.
+# files, plus (on pull requests) what the app stack would change. On main, when the checks
+# pass and the app changed, it then deploys (deploy.yml).
 #
 # Every action is pinned to a full commit SHA (a tag can be moved; a SHA can't), with its
 # version in the comment. To update one, look up the new tag's commit with
@@ -26,7 +27,7 @@ defaults:
     shell: bash
 
 jobs:
-  # The tests and the build. The same workflow runs before a deploy (see deploy.yml).
+  # The tests and the build.
   test:
     uses: ./.github/workflows/test.yml
 
@@ -125,7 +126,7 @@ jobs:
           {
             echo "### Terraform plan: app"
             echo
-            echo "CI applies this stack when the pull request is merged and the paths in deploy.yml changed."
+            echo "CI applies this stack after the pull request is merged (the deploy job in ci.yml)."
             echo
             echo '```'
             head -c 900000 plan.txt
@@ -144,3 +145,36 @@ jobs:
             echo
             echo "The \`AWS_PLAN_ROLE_ARN\` variable is not set, so there is no plan. See \"Set up and first run\" in infra/README.md."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # On main: did this push change anything that goes into the image or the app stack? Docs or
+  # tests alone don't deploy.
+  changes:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.diff.outputs.app }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          app='^(src/|migrations/|infra/app/|\.github/actions/setup-terraform/|package\.json$|package-lock\.json$|tsconfig\.json$|Dockerfile$|\.dockerignore$|\.node-version$|\.terraform-version$|infra/scripts/push-image\.sh$|\.github/workflows/(deploy|test)\.yml$)'
+          # If the previous commit is unknown (first push, force push), deploy to be safe.
+          if files="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" 2>/dev/null)" && ! grep -qE "$app" <<<"$files"; then
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "### No deploy: nothing in this push goes into the app." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: [test, terraform-check, changes]
+    if: needs.changes.outputs.app == 'true'
+    permissions:
+      contents: read
+      id-token: write # passed on to deploy.yml's release job
+    uses: ./.github/workflows/deploy.yml

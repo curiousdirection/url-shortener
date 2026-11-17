@@ -1,5 +1,5 @@
-# The tests and the build, against a Postgres 16 service. Not run on its own: ci.yml (every
-# pull request) and deploy.yml (before a deploy) call it, so the two can't drift apart.
+# The tests and the build, against a Postgres 16 service. Not run on its own: ci.yml calls it
+# on every pull request and every push to main.
 #
 # It needs nothing but to read the code. It has no permission to sign in to AWS (no
 # `id-token`), so the code and packages it runs can't get AWS credentials.
