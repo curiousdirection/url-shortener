@@ -9,7 +9,7 @@
 #
 # Usage: infra/scripts/release.sh   (run from anywhere; needs AWS credentials and Docker, and
 #        `terraform -chdir=infra/app init -backend-config=../backend.hcl` done once, and
-#        `state_bucket` set in infra/app/terraform.tfvars; see "Set up" in infra/README.md)
+#        `state_bucket` set in infra/app/terraform.tfvars; see "Set up and first run" in infra/README.md)
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."

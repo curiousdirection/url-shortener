@@ -12,78 +12,56 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 
 ## The three stacks
 
-Terraform is split in three, each with its own state, so that the part that changes every release can't break the parts that must not change.
-
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
-| `bootstrap/` | The S3 bucket for state, the GitHub sign-in (OIDC provider) and two IAM roles for CI | You, once, by hand |
-| `foundation/` | The VPC, the database and its password, the security groups, the two roles ECS uses | You, from your machine, after reading `terraform plan` |
-| `app/` | The ECR repository, the log group, the ECS Express service | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
+| `bootstrap/` | The S3 state bucket, GitHub's sign-in (OIDC) and the two CI roles | You, once |
+| `foundation/` | The VPC, the database and its password, security groups, the ECS roles | You, from your machine |
+| `app/` | ECR, the log group, the ECS Express service | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
-The state of `foundation/` and `app/` is in the S3 bucket. It holds no secrets: the database password is generated on each run and never stored ([ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md)). The state of `bootstrap/` stays on your machine (see "If you lose the bootstrap state").
-
-CI uses two roles that only GitHub's own sign-in can assume. `github-plan-url-shortener` is read-only, is used on pull requests to plan the app stack, and is denied every secret. `github-deploy-url-shortener` can push images and update the one service, and only the `production` environment (the `main` branch) can use it. Neither can change IAM, the network or the database.
+The `foundation/` and `app/` state is in S3 and holds no secrets. The `bootstrap/` state stays on your machine.
 
 ## Prerequisites
 
-- Terraform via [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` in the repo. It must be 1.11 or newer (the database password uses write-only arguments and an ephemeral resource).
-- An AWS CLI profile that can create the resources (for the bootstrap and foundation steps, admin is simplest), Docker and git.
+- Terraform via [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` in the repo (1.11 or newer).
+- An AWS CLI profile that can create the resources (admin is simplest), Docker and git.
 - Your account's region (AWS Settings > Project). The default is `eu-north-1`; to change it, put `region = "..."` in a `terraform.tfvars` in each stack folder.
 - Everything used is on the AWS Free plan ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
 
-## Set up (once)
+## Set up and first run
 
-### 1. Apply the bootstrap
+Do these once, in order, on a commit that is on `main`.
 
-```bash
-cd infra/bootstrap
-terraform init
-terraform apply
-terraform output
-```
+1. **Apply the bootstrap.** If the account already has a GitHub OIDC provider, add `-var create_github_oidc_provider=false`.
 
-This creates the state bucket (`url-shortener-tfstate-<account id>`), the OIDC provider and the two roles. Keep the outputs for steps 2 and 3.
+   ```bash
+   terraform -chdir=infra/bootstrap init
+   terraform -chdir=infra/bootstrap apply
+   terraform -chdir=infra/bootstrap output
+   ```
 
-If the account already has a GitHub OIDC provider (AWS allows one), the apply fails. Run it with `-var create_github_oidc_provider=false` to use the existing one.
+2. **Point the other stacks at the bucket.** Put the `state_bucket` output in `infra/backend.hcl` (copy `backend.hcl.example`) and in `infra/app/terraform.tfvars` as `state_bucket = "..."`. Both files are gitignored.
 
-### 2. Point the other stacks at the bucket
+   ```bash
+   terraform -chdir=infra/foundation init -backend-config=../backend.hcl
+   terraform -chdir=infra/app init -backend-config=../backend.hcl
+   ```
 
-```bash
-cd infra
-cp backend.hcl.example backend.hcl    # put the bucket from `output state_bucket` in it
-echo 'state_bucket = "<the same bucket>"' > app/terraform.tfvars
-terraform -chdir=foundation init -backend-config=../backend.hcl
-terraform -chdir=app init -backend-config=../backend.hcl
-```
+3. **Set up GitHub.** Under Settings > Environments, create `production` and limit its deployment branches to `main`. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
 
-The app stack reads the foundation's state from the same bucket, so it needs the name too: that is `state_bucket` in `app/terraform.tfvars`. It has no default, so the stack never guesses the name. CI sets it from `TF_STATE_BUCKET`. Both files are gitignored (they name your account). The state is locked with a small file in the bucket while Terraform runs, so two runs can't collide.
+   | Variable | Value | Where |
+   | --- | --- | --- |
+   | `AWS_REGION` | `eu-north-1` | Repository |
+   | `TF_STATE_BUCKET` | `state_bucket` output | Repository |
+   | `AWS_PLAN_ROLE_ARN` | `plan_role_arn` output | Repository |
+   | `AWS_DEPLOY_ROLE_ARN` | `deploy_role_arn` output | Environment `production` |
 
-### 3. Set up GitHub
-
-In the repository, Settings > Environments, create an environment named `production`. Under "Deployment branches and tags" choose "Selected branches and tags" and add `main`. Without this, any branch could use the deploy role.
-
-Then add these variables under Settings > Secrets and variables > Actions > Variables. None are secret.
-
-| Variable | Value | Where |
-| --- | --- | --- |
-| `AWS_REGION` | `eu-north-1` | Repository |
-| `TF_STATE_BUCKET` | `terraform output state_bucket`. The one place CI gets the bucket name from: it is used for the backend and as the app stack's `state_bucket` | Repository |
-| `AWS_PLAN_ROLE_ARN` | `terraform output plan_role_arn` | Repository |
-| `AWS_DEPLOY_ROLE_ARN` | `terraform output deploy_role_arn` | Environment `production` |
-
-Until `AWS_PLAN_ROLE_ARN` is set, the pull request check skips the app plan and says so in its summary. The plan also needs the foundation to be applied: it reads the foundation's state file in the bucket, and says "skipped" if there are no outputs in it. Any other problem reading it (no access, wrong bucket) fails the check.
-
-## First run
-
-Do these in order, on a commit that is on `main`.
-
-1. **Apply the foundation.** Read the plan first. It takes 10-15 minutes because it creates the database.
+4. **Apply the foundation.** Read the plan first. It takes 10-15 minutes because it creates the database.
 
    ```bash
    terraform -chdir=infra/foundation apply
    ```
 
-2. **Stand the app up from your machine**, because CI only updates a service that already exists.
+5. **Stand the app up from your machine**, because CI only updates a service that already exists.
 
    ```bash
    infra/scripts/release.sh
@@ -92,94 +70,55 @@ Do these in order, on a commit that is on `main`.
 
    If it fails with "Unable to assume the service linked role", ECS has just created that role for the account: run `release.sh` again a minute later.
 
-3. **Run the workflow once by hand.** In GitHub, Actions > Deploy > Run workflow, on `main`, with `app_version` empty. The image is already in ECR, so it skips the build and checks that CI can sign in and plan.
+6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `app_version` empty) to check that CI can sign in and plan.
 
-Two things can go wrong here, and both are expected:
-
-- **"Not authorized to perform sts:AssumeRoleWithWebIdentity".** The roles trust a token whose `sub` is `repo:curiousdirection/url-shortener:environment:production` (and `...:pull_request` for the plan role). GitHub repositories created or renamed after 15 July 2026 send an ID-based `sub` instead, such as `repo:curiousdirection@<owner id>/url-shortener@<repo id>:environment:production` ([GitHub docs](https://docs.github.com/en/actions/reference/security/oidc)). Get the two ids with `gh api repos/curiousdirection/url-shortener --jq '.owner.id, .id'`, then run `terraform apply -var 'github_oidc_sub_prefix=repo:curiousdirection@<owner id>/url-shortener@<repo id>'` in `bootstrap/` and run the workflow again. (The form for the environment and pull request parts is not shown in GitHub's docs, so confirm it.)
-- **"not authorized to perform ecs:..." (or `ecr:`, `logs:`).** The deploy role's permissions in `bootstrap/github.tf` were written from the AWS docs and have not been run against a real account. Add the action it names, apply the bootstrap and run again. Do the same for the plan role if the pull request plan fails.
-
-Then merge a small app change and watch it go out by itself.
+If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"), the repository probably sends GitHub's ID-based `sub` claim (repositories created or renamed after 15 July 2026, [docs](https://docs.github.com/en/actions/reference/security/oidc)). Get the ids with `gh api repos/curiousdirection/url-shortener --jq '.owner.id, .id'` and apply the bootstrap with `-var 'github_oidc_sub_prefix=repo:curiousdirection@<owner id>/url-shortener@<repo id>'`. If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/github.tf` and apply the bootstrap again: the permission lists haven't been run against a real account yet.
 
 ## Deploy
 
-**Normal case.** Merge to `main`. If the change touches `src/`, `migrations/`, `package.json`, `package-lock.json`, `tsconfig.json`, `Dockerfile`, `.dockerignore`, `.node-version`, `.terraform-version`, `infra/app/`, or the workflow files that deploy (`deploy.yml`, `test.yml`, `.github/actions/setup-terraform/`), the workflow runs:
+**Normal case.** Merge to `main`. A change to the app, its build files or `infra/app/` (the full list is under `paths` in `.github/workflows/deploy.yml`) runs the tests, builds and pushes the image (tagged with the first 7 characters of the commit SHA), applies the app stack and checks `/health`. One deploy runs at a time. If the stack is torn down, the run ends green and changes nothing.
 
-1. Tests, against a Postgres 16 service.
-2. A check that the app is deployed. If the stack is torn down, the run ends green with "the app is not deployed" in its summary, and changes nothing.
-3. Build the image for arm64, tagged with the first 7 characters of the commit SHA, and push it. Skipped if that tag is already in ECR.
-4. `terraform plan`, then `terraform apply` of that saved plan. The apply waits for the release to go live (10-15 minutes).
-5. `curl` on `/health`. The URL and the tag are in the run's summary.
+**From your machine.** Commit, then run `infra/scripts/release.sh`. It does the same, and asks you to confirm the apply. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
 
-Only one deploy runs at a time. A push during a deploy waits its turn.
-
-**From your machine.** Commit, then run `infra/scripts/release.sh`. It does the same as the workflow, and asks you to confirm the apply. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
-
-**Infrastructure changes** (anything in `bootstrap/` or `foundation/`). Pull requests don't plan these: refreshing the foundation would decrypt the database password, and any pull request can use the plan role. Check out the branch, read the plan, then merge and apply it yourself:
+**Infrastructure changes** (`bootstrap/` or `foundation/`). CI never plans or applies these. Read the plan, then merge and apply it yourself, before any app change that needs it:
 
 ```bash
 terraform -chdir=infra/foundation plan
 terraform -chdir=infra/foundation apply
 ```
 
-If an app change needs a foundation change, apply the foundation first. The app plan on the pull request fails or shows the gap. CI never applies `foundation/` or `bootstrap/`.
-
 ## Rotate the database password
 
-The password is generated fresh on every run, but it is only written to AWS when the parameter is created or `db_password_version` changes. To set a new one, raise the version by one in `infra/foundation/terraform.tfvars` (or pass `-var db_password_version=2`) and apply the foundation. Terraform writes the new password to the parameter, then reads it back and updates the database with it, in the same apply.
+Raise `db_password_version` by one in `infra/foundation/terraform.tfvars` and apply the foundation. The parameter and the database get the new password in the same apply.
 
-The database never gets a password of its own: whenever it is written, it is given what the parameter holds. So the two can't differ, even if the parameter is deleted by hand or an apply stops half way. The next apply puts the database right. If you still suspect they differ (a run was killed at the wrong moment), raise the version again. The comments in `foundation/database.tf` list the cases.
+Running tasks keep the old password, so every new connection fails until they are replaced. Either rotate while the stack is torn down, or do it at a quiet time and stop the tasks straight after (expect 1-3 minutes of errors):
 
-Applying the foundation reads the parameter, so you need `ssm:GetParameter` and `kms:Decrypt` (admin has them). CI doesn't touch it.
+```bash
+for task in $(aws ecs list-tasks --region eu-north-1 --cluster default --service-name url-shortener --query 'taskArns[]' --output text); do
+  aws ecs stop-task --region eu-north-1 --cluster default --task "$task" --reason "DB password rotated" >/dev/null
+done
+```
 
-**Running tasks keep the old password.** ECS hands a task the password once, when it starts. After a rotation, connections a task already holds keep working, but every new one fails, so the app returns errors until all tasks are replaced. Nothing rotates by itself; only raising `db_password_version` does this.
-
-So pick one of these:
-
-- **Rotate while the stack is torn down.** Nothing is running, so nothing breaks. (Recreating the stack also gives a new password.)
-- **Rotate a running stack and accept a short outage** (usually 1-3 minutes). Do it at a quiet time:
-
-  1. Apply the foundation with the new version, as above.
-  2. Stop the running tasks straight away. The service starts new ones, which read the new password:
-
-     ```bash
-     for task in $(aws ecs list-tasks --region eu-north-1 --cluster default --service-name url-shortener --query 'taskArns[]' --output text); do
-       aws ecs stop-task --region eu-north-1 --cluster default --task "$task" --reason "DB password rotated" >/dev/null
-     done
-     ```
-
-  3. Wait until `curl $(terraform -chdir=infra/app output -raw url)/health` answers `{"status":"ok"}` again.
-
-  Stopping the tasks is deliberate. A re-run of the Deploy workflow with the same image doesn't replace them, and a new release goes through the canary: the old tasks' errors can trip its alarm and roll the release back, which leaves the old tasks running.
-
-Moving the app to IAM database authentication would remove this outage, because the app would no longer use the password ([ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md), "Alternatives considered").
+Don't use a new release for this: the old tasks' errors can trip the canary's alarm and roll it back.
 
 ## Rollback
 
 A release first gets 5% of traffic and rolls back by itself if its error alarm fires; the apply step then fails and so does the run. The alarm adds the app's 4xx to its 5xx, ignoring fewer than 5 4xx in a check, and fires above 1% of requests ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)). A few stray 404s don't matter, but if more than 1% of real traffic is unknown codes or taken aliases, a good release rolls back.
 
-To go back to an earlier release that was already live:
-
-- In GitHub, Actions > Deploy > Run workflow, on `main`, with `app_version` set to the first 7 characters of the earlier commit SHA. It skips the tests and the build, and fails if that tag isn't in ECR.
-- Or revert the commit on `main` and let the workflow ship the revert.
-- Or from your machine: `terraform -chdir=infra/app apply -var app_version=<earlier commit>`.
+To go back to an earlier release, run the Deploy workflow by hand with `app_version` set to the earlier commit's first 7 characters (it skips the tests and the build), or revert the commit on `main`.
 
 ECR keeps the last 10 images. Migrations aren't rolled back, so each must work with the previous code too.
 
-To stop deploying on push, delete `.github/workflows/deploy.yml`. The state stays in S3 and `release.sh` keeps working.
-
 ## Tear down
 
-Take the app down before the foundation. The service uses the foundation's roles and security groups, and removing a role's policy before ECS is done with the service leaves it stuck in `DRAINING`.
+App first, then the foundation (the service uses the foundation's roles):
 
 ```bash
 terraform -chdir=infra/app destroy -var app_version=none
 terraform -chdir=infra/foundation destroy
 ```
 
-Express Mode removes what it created. While the app stack is empty, pushes to `main` end green with "the app is not deployed" and change nothing. To bring everything back, apply the foundation, then run `release.sh`.
-
-The bootstrap stays. It costs almost nothing (an empty bucket and two roles). To remove it too, empty the bucket (versions included) and run `terraform destroy` in `infra/bootstrap`; the apply refuses to delete a bucket that still holds state.
+Express Mode removes what it created. The bootstrap stays; it costs almost nothing. To remove it too, empty the bucket (versions included) and run `terraform destroy` in `infra/bootstrap`.
 
 Then check nothing is left; both should print nothing:
 
@@ -188,11 +127,11 @@ aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key
 aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first still lists the state bucket (it is tagged `Project=url-shortener`) while the bootstrap exists, and can list deleted resources for a few hours; if `terraform state list` is empty in `app/` and `foundation/`, those are stale. The second lists manual snapshots; only `url-shortener-final-*` ones are from this stack (full-scale settings keep one; delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`). An empty `default` ECS cluster may stay behind; it's free.
+The first lists the state bucket while the bootstrap exists, and can list deleted resources for a few hours; if `terraform state list` is empty in `app/` and `foundation/`, they're stale. The second lists manual snapshots; only `url-shortener-final-*` ones are from this stack (full-scale settings keep one; delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`). An empty `default` ECS cluster may stay behind; it's free.
 
 ## If you lose the bootstrap state
 
-`bootstrap/terraform.tfstate` is only on your machine. It has no secrets, so losing it breaks nothing that runs. To manage the bootstrap again, run `terraform init` there and import what exists (`terraform import aws_s3_bucket.state <bucket>`, and the same for the other resources listed in `terraform plan`), until the plan shows no changes. Or move the state into the bucket as well: add a `backend "s3"` block with the key `bootstrap/terraform.tfstate` and run `terraform init -migrate-state`. Both roles are denied access to that key.
+It has no secrets, so nothing that runs breaks. Run `terraform init` in `infra/bootstrap` and `terraform import` each resource `terraform plan` wants to create, until the plan shows no changes.
 
 ## Cost
 

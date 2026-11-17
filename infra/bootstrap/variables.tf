@@ -29,7 +29,7 @@ variable "create_github_oidc_provider" {
 }
 
 variable "github_oidc_sub_prefix" {
-  description = "The start of the `sub` claim in GitHub's tokens, before the environment or pull_request part. Leave empty for the classic form, `repo:<owner>/<repo>`. GitHub repositories created or renamed after 15 July 2026 use an ID-based form instead, e.g. `repo:<owner>@<owner id>/<repo>@<repo id>`. If the first workflow run is refused, copy the prefix from the `sub` in its error (see \"First run\" in infra/README.md)."
+  description = "The start of the `sub` claim in GitHub's tokens, before the environment or pull_request part. Leave empty for the classic form, `repo:<owner>/<repo>`. GitHub repositories created or renamed after 15 July 2026 use an ID-based form instead, e.g. `repo:<owner>@<owner id>/<repo>@<repo id>`. If the first workflow run is refused, copy the prefix from the `sub` in its error (see \"Set up and first run\" in infra/README.md)."
   type        = string
   default     = ""
 }

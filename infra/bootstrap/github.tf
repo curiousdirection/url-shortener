@@ -1,31 +1,13 @@
-# How GitHub Actions signs in to AWS, without any stored access keys.
-#
-# GitHub gives each workflow run a short-lived signed token ("OIDC token") that says which
-# repository, branch and environment the run is for. AWS is told to trust GitHub's signature
-# (the OIDC provider below), and each IAM role says which tokens may assume it (its "trust
-# policy"). The workflow trades its token for temporary AWS credentials.
+# How GitHub Actions signs in to AWS without stored keys: each run gets a signed token from
+# GitHub (OIDC), and a role's trust policy says which tokens may assume it.
 #   https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 #
-# Two roles, so that a pull request can only look and never change anything:
-#
-#   github-deploy-url-shortener  deploys the app. Only the `production` environment of this
-#                                repository can assume it, and (in GitHub) that environment
-#                                only accepts the main branch.
-#   github-plan-url-shortener    shows what a change would do. Any pull request of this
-#                                repository can assume it. Read-only.
-#
-# Neither role can create or change IAM roles or policies (so they can't change themselves or
-# each other), and neither can touch this bootstrap stack or its state.
+# Two roles: the deploy role (production environment on main) applies infra/app; the plan role
+# (pull requests) is read-only. Neither can change IAM or this stack.
 
 locals {
-  # The start of the `sub` claim in GitHub's tokens. Classic form: repo:owner/name.
-  #
-  # Heads up: GitHub repositories created or renamed after 15 July 2026 emit an ID-based sub
-  # (repo:owner@<owner id>/name@<repo id>) instead. If this repository gets it, AWS answers
-  # "Not authorized to perform sts:AssumeRoleWithWebIdentity" on the first run: set
-  # github_oidc_sub_prefix to what the workflow log shows and apply this stack again.
-  # GitHub's page does not show the environment and pull_request forms for the ID-based sub,
-  # so check them on the first run.
+  # The start of the token's `sub` claim. Repositories created or renamed after 15 July 2026
+  # use an ID-based form; see github_oidc_sub_prefix.
   #   https://docs.github.com/en/actions/reference/security/oidc
   sub_repo = var.github_oidc_sub_prefix != "" ? var.github_oidc_sub_prefix : "repo:${var.github_repository}"
 
@@ -45,8 +27,7 @@ locals {
   ecr_repository_arn = "arn:aws:ecr:${var.region}:${local.account_id}:repository/${var.name}"
   log_group_arn      = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/${var.name}/app"
 
-  # Explicit "no" for both roles. A deny beats any allow, so even if someone adds a broad
-  # permission to a role by mistake, these still hold.
+  # Explicit denies for both roles: they hold even if an allow is widened by mistake.
   deny_statements = [
     {
       Sid    = "NoIamChanges"
@@ -108,10 +89,8 @@ resource "aws_iam_role" "deploy" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          # Only jobs that run in the `production` environment of this repository...
           "token.actions.githubusercontent.com:sub" = "${local.sub_repo}:environment:${var.github_environment}"
-          # ...and only on main (a second lock; the environment in GitHub also allows only
-          # main). AWS's guidance for environment-based trust is to add this.
+          # A second lock besides the environment's branch rule, as AWS recommends.
           "token.actions.githubusercontent.com:ref" = "refs/heads/main"
         }
       }
@@ -119,14 +98,10 @@ resource "aws_iam_role" "deploy" {
   })
 }
 
-# What the deploy role may do: exactly what `terraform apply` in infra/app and the image push
-# need, and nothing for the network, the database or IAM. It can UPDATE the service but not
-# create or delete it: creating it again is a job for a person (release.sh), and a change that
-# would replace the service fails in CI instead of taking the app down.
-#
-# These lists are written from the AWS docs and the provider docs, and have not been run
-# against a real account. If the first run says "not authorized to perform <action>", add that
-# action here (see "First run" in infra/README.md).
+# Only what the image push and `terraform apply` in infra/app need. It can update the service
+# but not create or delete it, so a change that would replace the service fails in CI instead
+# of taking the app down. Not yet run against a real account: add any action the first run
+# is refused.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id
@@ -134,8 +109,7 @@ resource "aws_iam_role_policy" "deploy" {
     Version = "2012-10-17"
     Statement = concat([
       # --- Terraform state --------------------------------------------------------------
-      # The S3 backend lists the bucket, then reads, writes and deletes the state and its
-      # lock file for the app stack only.
+      # The app state and its lock file only.
       {
         Sid      = "StateBucket"
         Effect   = "Allow"
@@ -164,8 +138,7 @@ resource "aws_iam_role_policy" "deploy" {
         Action   = "ecr:GetAuthorizationToken"
         Resource = "*"
       },
-      # Push and look up images in the one repository, and let Terraform read and update the
-      # repository's settings and lifecycle policy. (Not create or delete the repository.)
+      # The one repository: push, read and update settings. Not create or delete.
       {
         Sid    = "EcrRepository"
         Effect = "Allow"
@@ -180,9 +153,8 @@ resource "aws_iam_role_policy" "deploy" {
       },
 
       # --- The ECS Express Mode service -------------------------------------------------
-      # Express Mode builds the load balancer, certificate and autoscaling itself, with the
-      # infrastructure role. The caller only needs the ECS actions below. They don't support
-      # narrower resources than "*" for the cluster and task definitions.
+      # Express Mode builds the rest itself, with the infrastructure role. These actions don't
+      # support narrower resources than "*".
       #   https://aws.amazon.com/blogs/containers/automated-deployments-with-github-actions-for-amazon-ecs-express-mode/
       {
         Sid    = "EcsExpressService"
@@ -197,8 +169,7 @@ resource "aws_iam_role_policy" "deploy" {
         ]
         Resource = "*"
       },
-      # Handing the two foundation roles to ECS is not "changing" them, but it is the one
-      # IAM permission a deploy needs. Only these two roles, and only to ECS.
+      # The one IAM permission a deploy needs: handing the two foundation roles to ECS.
       {
         Sid      = "PassEcsRoles"
         Effect   = "Allow"
@@ -255,14 +226,9 @@ resource "aws_iam_role" "plan" {
   })
 }
 
-# Read-only, for the app stack only. It can read both state files (the app stack reads the
-# foundation's outputs) and look at what the app stack manages, so that `terraform plan` works
-# for `infra/app`. It can't write anything, which is why CI runs the plan with -lock=false
-# (taking the lock would write a file).
-#
-# There is no foundation plan on pull requests: refreshing the database password parameter
-# would mean decrypting it, and any pull request can use this role. So this role is denied the
-# parameter and KMS decryption outright. You plan the foundation yourself before applying it.
+# Read-only, enough to plan infra/app. It can't write, so CI plans with -lock=false. It is
+# denied every secret: any pull request can use it, which is also why CI never plans the
+# foundation (refreshing it would decrypt the database password).
 resource "aws_iam_role_policy" "plan" {
   name = "plan-read-only"
   role = aws_iam_role.plan.id
@@ -293,10 +259,8 @@ resource "aws_iam_role_policy" "plan" {
         ]
         Resource = "*"
       },
-      # A deny wins over any allow, so this holds even if an allow above is widened later.
-      # The kms:Decrypt deny is safe for reading the state: the state bucket uses S3-managed
-      # encryption (SSE-S3, see state.tf), which needs no KMS permission. If that bucket ever
-      # moves to a KMS key, this deny would block the state reads above.
+      # The state bucket uses SSE-S3, so denying kms:Decrypt doesn't block state reads. Moving
+      # the bucket to a KMS key would.
       {
         Sid    = "NoSecrets"
         Effect = "Deny"

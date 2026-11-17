@@ -140,5 +140,5 @@ jobs:
           {
             echo "### Terraform plan: skipped"
             echo
-            echo "The \`AWS_PLAN_ROLE_ARN\` variable is not set, so there is no plan. See \"Set up\" in infra/README.md."
+            echo "The \`AWS_PLAN_ROLE_ARN\` variable is not set, so there is no plan. See \"Set up and first run\" in infra/README.md."
           } >> "$GITHUB_STEP_SUMMARY"

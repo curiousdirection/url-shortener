@@ -1,7 +1,7 @@
 # The bootstrap stack: what has to exist before the other two stacks and CI can work. The S3
 # bucket for Terraform state, the link that lets GitHub Actions sign in to AWS (an OIDC
 # provider) and the two IAM roles it signs in as. You apply this once, by hand, with admin
-# credentials. CI never touches it. See docs/decisions/0003 and "Set up" in ../README.md.
+# credentials. CI never touches it. See docs/decisions/0003 and "Set up and first run" in ../README.md.
 
 terraform {
   required_version = ">= 1.11"
