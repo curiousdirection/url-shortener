@@ -57,15 +57,6 @@ jobs:
           infra/scripts/plan-app.sh | tee plan.txt
           { echo '### Terraform plan: app'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
-  # Says why there is no plan, when the variable is not set yet.
-  plan-skipped:
-    if: github.event.pull_request.head.repo.full_name == github.repository && vars.AWS_PLAN_ROLE_ARN == ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: |
-          echo "### Terraform plan: skipped. Set the \`AWS_PLAN_ROLE_ARN\` variable (see \"Set up and first run\" in infra/README.md)." >> "$GITHUB_STEP_SUMMARY"
-
   # On main: did this push change anything that goes into the app? Docs or tests alone don't
   # deploy.
   changes:
