@@ -1,11 +1,14 @@
-# Installs the Terraform version in .terraform-version, so the version is written in one file
-# and every workflow uses it. Used by ci.yml and deploy.yml.
-#
-# Run actions/checkout before this: it reads .terraform-version from the checkout.
-#
-# Pinned to a full commit SHA, with its version in the comment (see ci.yml).
+# Installs the Terraform version in .terraform-version. With `role`, it also signs in to AWS
+# as that role and runs `terraform init` for infra/app, using the job's AWS_REGION and
+# TF_STATE_BUCKET. Run actions/checkout first. Used by ci.yml and deploy.yml.
 name: Set up Terraform
-description: Install the Terraform version in .terraform-version (without the wrapper script).
+description: Install Terraform; with a role, also sign in to AWS and init infra/app.
+
+inputs:
+  role:
+    description: IAM role to assume. Leave empty to only install Terraform.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -16,5 +19,15 @@ runs:
     - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
       with:
         terraform_version: ${{ steps.version.outputs.version }}
-        # The wrapper changes how output is captured (`terraform output -raw` needs it off).
-        terraform_wrapper: false
+        terraform_wrapper: false # `terraform output -raw` needs it off
+    - if: inputs.role != ''
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ inputs.role }}
+        aws-region: ${{ env.AWS_REGION }}
+    - if: inputs.role != ''
+      shell: bash
+      run: |
+        : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable}"
+        terraform -chdir=infra/app init -input=false \
+          -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION"
