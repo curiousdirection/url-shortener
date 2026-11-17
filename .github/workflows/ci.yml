@@ -1,5 +1,5 @@
-# Checks on every pull request: the tests, the build, the Terraform files, and what the
-# Terraform stacks would change. Nothing here changes anything in AWS.
+# Checks on every pull request and every push to main: the tests, the build and the Terraform
+# files, plus (on pull requests) what the app stack would change. Nothing here changes AWS.
 #
 # Every action is pinned to a full commit SHA (a tag can be moved; a SHA can't), with its
 # version in the comment. To update one, look up the new tag's commit with
@@ -9,14 +9,16 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
-# A new push to the same pull request replaces the run in progress.
+# A new push to a pull request replaces its run in progress. On main every commit gets a run.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
