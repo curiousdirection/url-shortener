@@ -13,13 +13,17 @@ fi
 VERSION="$(infra/scripts/image-tag.sh)"
 tf=(terraform -chdir=infra/app)
 
-# On the first release, create just the ECR repository: the image must be pushed before the
-# service that runs it can exist.
+# On the first release, create just the ECR repository and the log group: the image must be
+# pushed (and the setup task logged) before the service that runs it can exist.
 REPO="$("${tf[@]}" output -raw ecr_repository_url)"
 if [ -z "$REPO" ]; then
-  "${tf[@]}" apply -auto-approve -target=aws_ecr_repository.app -var "app_version=$VERSION"
+  "${tf[@]}" apply -auto-approve -target=aws_ecr_repository.app -target=aws_cloudwatch_log_group.app \
+    -var "app_version=$VERSION"
   REPO="$("${tf[@]}" output -raw ecr_repository_url)"
 fi
 infra/scripts/push-image.sh "$REPO" "$VERSION"
+
+# The app logs in as its own database user, which has to exist before a task starts.
+infra/scripts/setup-db.sh "$REPO:$VERSION"
 
 "${tf[@]}" apply -var "app_version=$VERSION"

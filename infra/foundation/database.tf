@@ -24,9 +24,10 @@ ephemeral "random_password" "db" {
   special = false
 }
 
-# The one place the password is stored, encrypted. ECS reads it when a task starts and passes
-# it in as PGPASSWORD. Terraform can't see the stored value, so it only writes a new one when
-# `value_wo_version` changes (or the parameter is created).
+# The one place the password is stored, encrypted. Only the one-off setup task reads it
+# (infra/scripts/setup-db.sh); the app logs in with IAM tokens. Terraform can't see the stored
+# value, so it only writes a new one when `value_wo_version` changes (or the parameter is
+# created).
 resource "aws_ssm_parameter" "db_password" {
   name             = "/${var.name}/db_password"
   type             = "SecureString"
@@ -74,6 +75,10 @@ resource "aws_db_instance" "main" {
   # What the parameter holds; sent again whenever the marker changes (see above).
   password_wo         = ephemeral.aws_ssm_parameter.db_password.value
   password_wo_version = terraform_data.db_password_written.output
+
+  # Lets the app log in with a token instead of the password (see iam.tf). RDS wants 300-1000
+  # MiB of extra memory for this and db.t4g.micro has 1 GiB in total: see ADR 0005.
+  iam_database_authentication_enabled = true
 
   # Disk size in GiB. gp3 is general-purpose SSD storage. Encrypted at rest.
   allocated_storage = var.db_allocated_storage

@@ -23,7 +23,7 @@ All three states are in the S3 bucket.
 ## Prerequisites
 
 - Terraform via [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` in the repo (1.11 or newer).
-- An AWS CLI profile that can create the resources (admin is simplest), Docker and git.
+- An AWS CLI profile that can create the resources and run ECS tasks (admin is simplest), Docker, git and jq.
 - Your account's region (AWS Settings > Project). The default is `eu-north-1`; to change it, put `region = "..."` in a `terraform.tfvars` in each stack folder.
 - Everything used is on the AWS Free plan ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
 
@@ -80,7 +80,7 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/foundation apply
    ```
 
-6. **Stand the app up from your machine**, because CI only updates a service that already exists.
+6. **Stand the app up from your machine**, because CI only updates a service that already exists. It also creates the database user the app logs in as (see Deploy).
 
    ```bash
    infra/scripts/release.sh
@@ -95,7 +95,7 @@ If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/d
 
 ## Deploy
 
-**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
+**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. Each task runs the migrations before it starts, as the `app` database user ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)). `release.sh` runs the database setup task first, which CI never does ([ADR 0005](../docs/decisions/0005-iam-database-authentication.md)); if it fails, the script prints its log stream in the app's log group.
 
 **Infrastructure changes** (`bootstrap/` or `foundation/`): CI never applies these. Plan and apply them yourself, before merging anything that needs them:
 
@@ -110,17 +110,7 @@ Repeat step 4 (a user can hold two keys, so the old one works until you delete i
 
 ## Rotate the database password
 
-Raise `db_password_version` by one in `infra/foundation/terraform.tfvars` and apply the foundation. The parameter and the database get the new password in the same apply.
-
-Running tasks keep the old password, so every new connection fails until they are replaced. Either rotate while the stack is torn down, or do it at a quiet time and stop the tasks straight after (expect 1-3 minutes of errors):
-
-```bash
-for task in $(aws ecs list-tasks --region eu-north-1 --cluster default --service-name url-shortener --query 'taskArns[]' --output text); do
-  aws ecs stop-task --region eu-north-1 --cluster default --task "$task" --reason "DB password rotated" >/dev/null
-done
-```
-
-Don't use a new release for this: the old tasks' errors can trip the canary's alarm and roll it back.
+Raise `db_password_version` by one in `infra/foundation/terraform.tfvars` and apply the foundation. The parameter and the database get the new password in the same apply. Do it any time: running tasks log in with IAM tokens, not the password, and the next `release.sh` reads the new one in the setup task.
 
 ## Rollback
 
@@ -129,6 +119,8 @@ A release first gets 5% of traffic and rolls back by itself if its error alarm f
 To go back to an earlier release, run the Deploy workflow by hand with `app_version` set to that release's image tag, shown in its Deploy run (it skips the build), or revert the commit on `main`.
 
 ECR keeps the last 10 images. Migrations aren't rolled back, so each must work with the previous code too.
+
+You can't go back past the release that switched to IAM database authentication: older images expect a password the service no longer provides. To go back that far, revert the PR, apply the foundation, then run `release.sh`.
 
 ## Tear down
 

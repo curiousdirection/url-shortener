@@ -31,9 +31,12 @@ resource "aws_iam_user_policy" "deploy_assume_role" {
 locals {
   ecr_repository_arn = "arn:aws:ecr:${var.region}:${local.account_id}:repository/${var.name}"
   log_group_arn      = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/${var.name}/app"
-  # The two roles ECS uses, made in infra/foundation/iam.tf with these exact names.
+  # The roles ECS uses for the service, made in infra/foundation/iam.tf with these exact names.
+  # Not the setup task's execution role: CI must not be able to run a task that reads the
+  # database password.
   ecs_role_arns = [
     "arn:aws:iam::${local.account_id}:role/${var.name}-execution",
+    "arn:aws:iam::${local.account_id}:role/${var.name}-task",
     "arn:aws:iam::${local.account_id}:role/${var.name}-infrastructure",
   ]
 }
@@ -86,7 +89,7 @@ resource "aws_iam_role_policy" "deploy" {
         ]
         Resource = "*"
       },
-      # The one IAM permission a deploy needs: handing the two ECS roles to ECS.
+      # The one IAM permission a deploy needs: handing the three ECS roles to ECS.
       {
         Effect    = "Allow"
         Action    = "iam:PassRole"

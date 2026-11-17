@@ -1,7 +1,7 @@
 # The app: a container image in ECR, run by an ECS Express Mode service.
 #
-# The network, the database, the security groups, the two IAM roles and the database password
-# come from the foundation stack (see the data source below).
+# The network, the database, the security groups and the IAM roles come from the foundation
+# stack (see the data source below).
 #
 # Express Mode creates the rest: the ECS cluster ("default"), task definition, an
 # internet-facing load balancer with HTTPS and a certificate, target group, its own security
@@ -56,6 +56,7 @@ resource "aws_cloudwatch_log_group" "app" {
 resource "aws_ecs_express_gateway_service" "app" {
   service_name            = var.name
   execution_role_arn      = local.foundation.execution_role_arn
+  task_role_arn           = local.foundation.task_role_arn
   infrastructure_role_arn = local.foundation.infrastructure_role_arn
 
   # Graviton (Arm): cheaper than x86. scripts/release.sh builds the image for linux/arm64.
@@ -91,15 +92,15 @@ resource "aws_ecs_express_gateway_service" "app" {
       log_stream_prefix = "ecs"
     }
 
-    # pg reads PGPASSWORD itself (see src/db.ts). verify-full checks the server certificate and
-    # its name against the RDS CA bundle in the image.
+    # The app logs in as `app` with a token (src/db.ts); there is no password. verify-full
+    # checks the server certificate and its name against the RDS CA bundle in the image.
     environment {
       name  = "DATABASE_URL"
-      value = "postgres://${local.foundation.db_username}@${local.foundation.db_address}:5432/${local.foundation.db_name}?sslmode=verify-full"
+      value = "postgres://app@${local.foundation.db_address}:5432/${local.foundation.db_name}?sslmode=verify-full"
     }
-    secret {
-      name       = "PGPASSWORD"
-      value_from = local.foundation.db_password_parameter_arn
+    environment {
+      name  = "DATABASE_IAM_AUTH"
+      value = "true"
     }
   }
 

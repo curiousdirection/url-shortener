@@ -8,7 +8,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 - **Stored keys, narrowly used.** GitHub Actions signs in with an IAM user's access key (a GitHub secret) and assumes a role, so jobs get credentials that expire within an hour. Each user can only assume its own role, and each role trusts only its user ([ADR 0004](decisions/0004-access-keys-instead-of-oidc.md)).
 - **Deploy keys only on `main`.** They are secrets of the `production` environment, which only `main` can use. The plan keys are repository secrets, so CI on any branch can use them.
-- **Least privilege.** The deploy role can push images and update the one ECS service, and pass the two ECS roles to ECS. The plan role is read-only and only plans `infra/app`. Neither role can change IAM, the network, the database or the bootstrap stack (`infra/bootstrap/deploy-role.tf`, `plan-role.tf`).
+- **Least privilege.** The deploy role can push images and update the one ECS service, and pass the app's three ECS roles to ECS. It can't run tasks or pass the database setup task's role. The plan role is read-only and only plans `infra/app`. Neither role can change IAM, the network, the database or the bootstrap stack (`infra/bootstrap/deploy-role.tf`, `plan-role.tf`).
 - **No secrets for branches.** The plan role is explicitly denied SSM parameter reads, KMS decryption and Secrets Manager values, so code pushed to a branch can't read the database password.
 - **Workflow permissions.** Workflows get a read-only `GITHUB_TOKEN`. The test job, which runs npm packages, is given no secrets.
 - **Infra changes need a person.** CI never plans or applies `infra/foundation` or `infra/bootstrap`.
@@ -16,7 +16,12 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 ### Secrets
 
 - **The database password is never in Terraform state, plans or logs.** It is generated as an ephemeral value and sent with write-only arguments (`infra/foundation/database.tf`).
-- **Stored encrypted.** It lives in an SSM SecureString parameter. ECS reads it at task start; only the execution role may read that parameter.
+- **Stored encrypted.** It lives in an SSM SecureString parameter. Only the execution role of the one-off database setup task may read it. That task is run by a person through `infra/scripts/release.sh`, never by CI, and the app has no password at all ([ADR 0005](decisions/0005-iam-database-authentication.md)).
+
+### Database login
+
+- **The app is not the master user.** It logs in as `app`, which owns the app's tables but can't create roles or databases.
+- **Short-lived tokens.** The login is an IAM token valid for 15 minutes. The task role may connect only as `app` to this one database (`infra/foundation/iam.tf`).
 
 ### Supply chain
 

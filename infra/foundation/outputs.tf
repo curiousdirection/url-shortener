@@ -11,22 +11,31 @@ output "app_security_group_id" {
   value = aws_security_group.app.id
 }
 
-# The two roles ECS uses (see iam.tf).
+# The roles ECS uses (see iam.tf).
 output "execution_role_arn" {
   value = aws_iam_role.execution.arn
+}
+
+output "task_role_arn" {
+  value = aws_iam_role.task.arn
 }
 
 output "infrastructure_role_arn" {
   value = aws_iam_role.infrastructure.arn
 }
 
-# The parameter holding the database password, for ECS to pass in as PGPASSWORD.
+# For infra/scripts/setup-db.sh, the one-off task that creates the app's database user: its
+# execution role, and the parameter with the password it reads.
+output "db_setup_execution_role_arn" {
+  value = aws_iam_role.db_setup_execution.arn
+}
+
 output "db_password_parameter_arn" {
   value = aws_ssm_parameter.db_password.arn
 }
 
-# What the app needs to build its DATABASE_URL. The password is not part of it: pg reads it
-# from PGPASSWORD.
+# What the app and the setup task need to build their DATABASE_URL. The master username is
+# only for the setup task; the app logs in as `app`.
 output "db_address" {
   value = aws_db_instance.main.address
 }
