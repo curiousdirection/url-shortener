@@ -9,9 +9,11 @@
     "start": "node dist/server.js",
     "migrate": "tsx src/migrate.ts",
     "migrate:test": "dotenv -o -e .env.test -- tsx src/migrate.ts",
+    "setup-db": "tsx src/setupDb.ts",
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/rds-signer": "^3.1171.0",
     "@hono/node-server": "^2.1.7",
     "@hono/zod-validator": "^0.9.1",
     "hono": "^4.13.18",
