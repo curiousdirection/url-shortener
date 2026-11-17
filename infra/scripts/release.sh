@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
-# Build the app image, push it to ECR and deploy it (the app stack, infra/app). See "Deploy" in
-# infra/README.md. The deploy workflow (.github/workflows/deploy.yml) does the same on every
-# push to main; use this script for the first run, and when you want to release from your
-# machine.
-#
-# It does NOT apply the foundation stack (network, database, roles). Do that first, yourself,
-# after reading its plan: terraform -chdir=infra/foundation apply
-#
-# Usage: infra/scripts/release.sh   (run from anywhere; needs AWS credentials and Docker, and
-#        `terraform -chdir=infra/app init -backend-config=../backend.hcl` done once, and
-#        `state_bucket` set in infra/app/terraform.tfvars; see "Set up and first run" in infra/README.md)
+# Build the app image, push it to ECR and apply infra/app. For the first run and releases
+# from your machine; CI does the same on main. See "Deploy" in infra/README.md.
+# Usage: infra/scripts/release.sh   (needs AWS credentials, Docker and the setup in that README)
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
