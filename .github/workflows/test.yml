@@ -15,7 +15,7 @@ permissions:
 
 defaults:
   run:
-    # Makes `a | b` fail if `a` fails, and `set -e` apply to every step.
+    # Adds `-o pipefail`, so `a | b` fails when `a` fails (the default shell only has `-e`).
     shell: bash
 
 jobs:
