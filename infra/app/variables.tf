@@ -25,7 +25,7 @@ variable "state_bucket" {
 }
 
 variable "app_version" {
-  description = "Image tag to run: the first 7 characters of the git commit SHA that scripts/release.sh or the deploy workflow pushed. No default, so pass -var app_version=... on every apply and destroy (any value works for destroy)."
+  description = "Image tag to run (see scripts/image-tag.sh). No default, so pass -var app_version=... on every apply and destroy (any value works for destroy)."
   type        = string
 }
 

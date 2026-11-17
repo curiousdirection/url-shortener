@@ -107,7 +107,7 @@ Don't use a new release for this: the old tasks' errors can trip the canary's al
 
 A release first gets 5% of traffic and rolls back by itself if its error alarm fires; the apply step then fails and so does the run. The alarm adds the app's 4xx to its 5xx, ignoring fewer than 5 4xx in a check, and fires above 1% of requests ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)). A few stray 404s don't matter, but if more than 1% of real traffic is unknown codes or taken aliases, a good release rolls back.
 
-To go back to an earlier release, run the Deploy workflow by hand with `app_version` set to the earlier commit's first 7 characters (it skips the tests and the build), or revert the commit on `main`.
+To go back to an earlier release, run the Deploy workflow by hand with `app_version` set to that release's image tag, shown in its Deploy run (it skips the build), or revert the commit on `main`.
 
 ECR keeps the last 10 images. Migrations aren't rolled back, so each must work with the previous code too.
 

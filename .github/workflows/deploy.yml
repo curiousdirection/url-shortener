@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       app_version:
-        description: "Existing image tag to roll back to (the first 7 characters of the commit SHA). Skips the build."
+        description: "Image tag to roll back to, as shown in an earlier Deploy run. Skips the build."
         required: false
         type: string
 
@@ -79,15 +79,12 @@ jobs:
             echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Tag: the first 7 characters of the commit SHA, as in release.sh, so either can reuse the
-      # other's image.
       - name: Build and push the image
         id: image
         if: env.SKIP == ''
         run: |
           repo="$(terraform -chdir=infra/app output -raw ecr_repository_url)"
-          sha="$(git rev-parse HEAD)"
-          tag="${ROLLBACK_TO:-${sha:0:7}}"
+          tag="${ROLLBACK_TO:-$(infra/scripts/image-tag.sh)}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           infra/scripts/push-image.sh "$repo" "$tag" ${ROLLBACK_TO:+--no-build}
 

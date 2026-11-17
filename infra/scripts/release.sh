@@ -10,11 +10,7 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "Uncommitted changes: commit or stash first so the image tag matches the code." >&2
   exit 1
 fi
-# The first 7 characters of the commit SHA, the same as the deploy workflow, so an image built
-# by either is reused. (Not `git rev-parse --short=7`: 7 is only its minimum, so a full clone
-# can give a longer name than the workflow's shallow checkout.)
-SHA="$(git rev-parse HEAD)"
-VERSION="${SHA:0:7}"
+VERSION="$(infra/scripts/image-tag.sh)"
 tf=(terraform -chdir=infra/app)
 
 # The repository has to exist before the first push, and the service needs the image. So on

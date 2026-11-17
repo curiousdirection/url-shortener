@@ -11,7 +11,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 APP_PATHS=(
   src/ migrations/ infra/app/ .github/actions/setup-terraform/
   package.json package-lock.json tsconfig.json Dockerfile .dockerignore .node-version
-  .terraform-version infra/scripts/push-image.sh
+  .terraform-version infra/scripts/push-image.sh infra/scripts/image-tag.sh
   .github/workflows/deploy.yml .github/workflows/test.yml
 )
 
