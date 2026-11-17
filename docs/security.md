@@ -6,11 +6,11 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 ### Access to AWS
 
-- **No stored keys.** GitHub Actions signs in with OIDC and gets credentials that expire within an hour ([ADR 0003](decisions/0003-split-stacks-remote-state-and-ci-deploys.md)).
-- **Narrow trust.** The deploy role can only be assumed by this repository's `production` environment on `main`. The plan role can only be assumed by CI runs on this repository's branches.
+- **Stored keys, narrowly used.** GitHub Actions signs in with an IAM user's access key (a GitHub secret) and assumes a role, so jobs get credentials that expire within an hour. Each user can only assume its own role, and each role trusts only its user ([ADR 0004](decisions/0004-access-keys-instead-of-oidc.md)).
+- **Deploy keys only on `main`.** They are secrets of the `production` environment, which only `main` can use. The plan keys are repository secrets, so CI on any branch can use them.
 - **Least privilege.** The deploy role can push images and update the one ECS service, and pass the two ECS roles to ECS. The plan role is read-only and only plans `infra/app`. Neither role can change IAM, the network, the database or the bootstrap stack (`infra/bootstrap/deploy-role.tf`, `plan-role.tf`).
 - **No secrets for branches.** The plan role is explicitly denied SSM parameter reads, KMS decryption and Secrets Manager values, so code pushed to a branch can't read the database password.
-- **Workflow permissions.** Workflows get a read-only `GITHUB_TOKEN`. Only the jobs that sign in to AWS may request an OIDC token; the test job, which runs npm packages, can't.
+- **Workflow permissions.** Workflows get a read-only `GITHUB_TOKEN`. The test job, which runs npm packages, is given no secrets.
 - **Infra changes need a person.** CI never plans or applies `infra/foundation` or `infra/bootstrap`.
 
 ### Secrets
@@ -50,4 +50,5 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Branch protection | Unreviewed or unchecked code reaching `main` | GitHub settings: require a pull request and passing checks |
 | Abuse of the shortener | Anyone can create links (no auth, no rate limit), so it can hide phishing or malware links | Rate limiting, AWS WAF, a URL blocklist |
+| Key rotation | Stale or leaked CI access keys, which don't expire | A reminder to rotate by hand (`infra/README.md`), or OIDC if the account allows it |
 | Account monitoring | Suspicious API calls or access | CloudTrail, GuardDuty |
