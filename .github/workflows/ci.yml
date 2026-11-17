@@ -1,7 +1,7 @@
-# Checks on every pull request and every push to main: tests, build and Terraform files, plus
-# the app plan on pull requests. On main, when the checks pass and the app changed, it then
-# deploys (deploy.yml). Actions are pinned to commit SHAs; update the SHA and the version
-# comment together (`git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'`).
+# Checks on every pull request and every push to main: tests and build (test.yml), Terraform
+# checks plus the app plan on pull requests (terraform.yml). On main, when they pass and the
+# app changed, it then deploys (deploy.yml). Actions are pinned to commit SHAs; update the SHA
+# and the version comment together (`git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'`).
 name: CI
 
 on:
@@ -25,35 +25,12 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
 
-  terraform-check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-terraform
-      - run: infra/scripts/check-terraform.sh
-
-  # What would merging change in the app stack? Uses the read-only plan role. There is no
-  # foundation plan: refreshing it would decrypt the database password. Forks get no AWS token.
-  plan:
-    if: github.event.pull_request.head.repo.full_name == github.repository && vars.AWS_PLAN_ROLE_ARN != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  # Terraform checks, and the app plan on pull requests (terraform.yml).
+  terraform:
     permissions:
       contents: read
-      id-token: write
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-terraform
-        with:
-          role: ${{ vars.AWS_PLAN_ROLE_ARN }}
-      - run: |
-          infra/scripts/plan-app.sh | tee plan.txt
-          { echo '### Terraform plan: app'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      id-token: write # only terraform.yml's plan job uses it
+    uses: ./.github/workflows/terraform.yml
 
   # On main: did this push change anything that goes into the app? Docs or tests alone don't
   # deploy.
@@ -76,7 +53,7 @@ jobs:
           if [ "$app" = false ]; then echo "### No deploy: nothing in this push goes into the app." >> "$GITHUB_STEP_SUMMARY"; fi
 
   deploy:
-    needs: [test, terraform-check, changes]
+    needs: [test, terraform, changes]
     if: needs.changes.outputs.app == 'true'
     permissions:
       contents: read
