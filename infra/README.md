@@ -18,7 +18,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 | `foundation/` | The VPC, the database and its password, security groups, the ECS roles | You, from your machine |
 | `app/` | ECR, the log group, the ECS Express service | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
-The `foundation/` and `app/` state is in S3 and holds no secrets. The `bootstrap/` state stays on your machine.
+All three states are in the S3 bucket, versioned, and hold no secrets.
 
 ## Prerequisites
 
@@ -31,17 +31,21 @@ The `foundation/` and `app/` state is in S3 and holds no secrets. The `bootstrap
 
 Do these once, in order, on a commit that is on `main`.
 
-1. **Apply the bootstrap.** If the account already has a GitHub OIDC provider, add `-var create_github_oidc_provider=false`.
+1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. If the account already has a GitHub OIDC provider, add `-var create_github_oidc_provider=false` to the apply.
 
    ```bash
+   printf 'terraform {\n  backend "local" {}\n}\n' > infra/bootstrap/backend_override.tf
    terraform -chdir=infra/bootstrap init
    terraform -chdir=infra/bootstrap apply
    terraform -chdir=infra/bootstrap output
    ```
 
-2. **Point the other stacks at the bucket.** Put the `state_bucket` output in `infra/backend.hcl` (copy `backend.hcl.example`) and in `infra/app/terraform.tfvars` as `state_bucket = "..."`. Both files are gitignored.
+2. **Move the state into the bucket.** Put the `state_bucket` output in `infra/backend.hcl` (copy `backend.hcl.example`) and in `infra/app/terraform.tfvars` as `state_bucket = "..."`. Both files are gitignored. Then remove the override, move the bootstrap's state into the bucket (answer `yes`), and point the other stacks there too:
 
    ```bash
+   rm infra/bootstrap/backend_override.tf
+   terraform -chdir=infra/bootstrap init -migrate-state -backend-config=../backend.hcl
+   rm -f infra/bootstrap/terraform.tfstate infra/bootstrap/terraform.tfstate.backup
    terraform -chdir=infra/foundation init -backend-config=../backend.hcl
    terraform -chdir=infra/app init -backend-config=../backend.hcl
    ```
@@ -118,7 +122,7 @@ terraform -chdir=infra/app destroy -var app_version=none
 terraform -chdir=infra/foundation destroy
 ```
 
-Express Mode removes what it created. The bootstrap stays; it costs almost nothing. To remove it too, empty the bucket (versions included) and run `terraform destroy` in `infra/bootstrap`.
+Express Mode removes what it created. The bootstrap stays; it costs almost nothing. To remove it too, move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
 
 Then check nothing is left; both should print nothing:
 
@@ -128,10 +132,6 @@ aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query
 ```
 
 The first lists the state bucket while the bootstrap exists, and can list deleted resources for a few hours; if `terraform state list` is empty in `app/` and `foundation/`, they're stale. The second lists manual snapshots; only `url-shortener-final-*` ones are from this stack (full-scale settings keep one; delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`). An empty `default` ECS cluster may stay behind; it's free.
-
-## If you lose the bootstrap state
-
-It has no secrets, so nothing that runs breaks. Run `terraform init` in `infra/bootstrap` and `terraform import` each resource `terraform plan` wants to create, until the plan shows no changes.
 
 ## Cost
 

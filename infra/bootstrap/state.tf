@@ -1,5 +1,5 @@
-# The S3 bucket that holds the Terraform state of the foundation and app stacks, one file
-# each (foundation/terraform.tfstate and app/terraform.tfstate). With no secrets in the state
+# The S3 bucket that holds the Terraform state of all three stacks, one file each
+# (bootstrap/, foundation/ and app/terraform.tfstate). With no secrets in the state
 # (see "No password in state" in docs/decisions/0003), it is still worth
 # protecting: whoever can write the state can change what Terraform builds.
 

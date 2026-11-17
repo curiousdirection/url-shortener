@@ -1,4 +1,4 @@
-# Where the foundation and app stacks keep their state. Copy to backend.hcl (gitignored) and
+# Where the three stacks keep their state. Copy to backend.hcl (gitignored) and
 # fill in the bucket from `terraform -chdir=bootstrap output state_bucket`. Then, in each stack:
 #   terraform init -backend-config=../backend.hcl
 # CI passes the same two values from the TF_STATE_BUCKET and AWS_REGION GitHub variables.

@@ -11,7 +11,7 @@ We want a push to `main` to ship the app. CI can't use a local state file and sh
 ## Decision
 
 - **Three stacks, each with its own state.** `infra/bootstrap` (state bucket, GitHub sign-in, CI roles), `infra/foundation` (network, database, ECS roles, password parameter) and `infra/app` (ECR, logs, the ECS Express service).
-- **State in S3**, encrypted, versioned, private, with S3 native locking. The bootstrap's own state stays local.
+- **State in S3**, encrypted, versioned, private, with S3 native locking. The bootstrap's own state starts local, because the bucket doesn't exist yet, and moves into the bucket after the first apply.
 - **No password in state.** It is generated as an ephemeral value and sent with write-only arguments, so it never reaches the plan, the state or the logs.
 - **CI applies only the app stack**, on a push to `main` that changes the app. You plan and apply the foundation from your machine.
 - **GitHub signs in with OIDC, with two roles.** The deploy role is limited to the `production` environment on `main` and can only push images and update the one service. The plan role is for pull requests, is read-only, plans only the app stack and is denied every secret.

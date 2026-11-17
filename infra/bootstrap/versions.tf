@@ -6,12 +6,14 @@
 terraform {
   required_version = ">= 1.11"
 
-  # State: this stack keeps its state LOCALLY, in this folder (terraform.tfstate, gitignored).
-  # It can't live in the bucket it creates until the bucket exists, and it holds no secrets
-  # (no passwords, only names and ARNs). If you lose the file, nothing breaks; you re-import
-  # the resources (see "If you lose the bootstrap state" in ../README.md). Keeping the roles'
-  # own state out of the bucket also means the CI roles can never be given access to it.
-  # There is no `backend` block on purpose.
+  # State in the bucket this stack creates. The bucket doesn't exist on the very first apply,
+  # so that one runs with a local backend_override.tf (gitignored) and the state is moved here
+  # afterwards (see "Set up and first run" in ../README.md). Both CI roles are denied this key.
+  backend "s3" {
+    key          = "bootstrap/terraform.tfstate"
+    use_lockfile = true
+    encrypt      = true
+  }
 
   required_providers {
     aws = {
