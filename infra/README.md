@@ -40,11 +40,11 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/bootstrap output
    ```
 
-2. **Move the state into the bucket.** Put the `state_bucket` output in `infra/backend.hcl` (copy `backend.hcl.example`) and in `infra/app/terraform.tfvars` as `state_bucket = "..."`. Both files are gitignored. Then remove the override, move the bootstrap's state into the bucket (answer `yes`), and point the other stacks there too:
+2. **Move the state into the bucket.** Put the `state_bucket` output in `infra/backend.hcl` (`cp infra/backend.hcl.example infra/backend.hcl`) and in `infra/app/terraform.tfvars` (touch `infra/app/terraform.tfvars`) as `state_bucket = "..."`. Both files are gitignored.
 
    ```bash
    rm infra/bootstrap/backend_override.tf
-   terraform -chdir=infra/bootstrap init -migrate-state -backend-config=../backend.hcl
+   terraform -chdir=infra/bootstrap init -migrate-state -backend-config=../backend.hcl # yes
    rm -f infra/bootstrap/terraform.tfstate infra/bootstrap/terraform.tfstate.backup
    terraform -chdir=infra/foundation init -backend-config=../backend.hcl
    terraform -chdir=infra/app init -backend-config=../backend.hcl
