@@ -54,31 +54,36 @@ jobs:
         with:
           role: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
 
-      # Stop green, changing nothing, if the stack is torn down (CI never recreates it), or if
-      # nothing that goes into the app changed since the deployed commit (docs or tests alone).
-      - name: Check whether to deploy
-        id: gate
+      # The two steps below end the deploy early, changing nothing (the run stays green). Each
+      # sets SKIP, and every later step only runs while SKIP is unset.
+
+      # CI never recreates a torn-down stack: that's release.sh, so a stray push can't start a bill.
+      - name: Skip if the app is torn down
         run: |
           if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
             grep -q "No state file was found" err.txt || { cat err.txt >&2; exit 1; }
-            list=""
           fi
-          if ! grep -qx 'aws_ecs_express_gateway_service.app' <<<"$list"; then
-            echo "go=false" >> "$GITHUB_OUTPUT"
+          if ! grep -qx 'aws_ecs_express_gateway_service.app' <<<"${list:-}"; then
+            echo "SKIP=torn-down" >> "$GITHUB_ENV"
             echo "### Deploy skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
-          elif [ -z "$ROLLBACK_TO" ] && deployed="$(terraform -chdir=infra/app output -raw app_version)" &&
-               [ "$(infra/scripts/app-changed.sh "$deployed" HEAD)" = false ]; then
-            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Docs or tests alone don't deploy. Compares the deployed commit with this one. A manual
+      # rollback skips this check.
+      - name: Skip if nothing in the app changed
+        if: env.SKIP == '' && inputs.app_version == ''
+        run: |
+          deployed="$(terraform -chdir=infra/app output -raw app_version)"
+          if [ "$(infra/scripts/app-changed.sh "$deployed" HEAD)" = false ]; then
+            echo "SKIP=unchanged" >> "$GITHUB_ENV"
             echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "go=true" >> "$GITHUB_OUTPUT"
           fi
 
       # Tag: the first 7 characters of the commit SHA, as in release.sh, so either can reuse the
       # other's image.
       - name: Build and push the image
         id: image
-        if: steps.gate.outputs.go == 'true'
+        if: env.SKIP == ''
         run: |
           repo="$(terraform -chdir=infra/app output -raw ecr_repository_url)"
           sha="$(git rev-parse HEAD)"
@@ -89,7 +94,7 @@ jobs:
       # Apply exactly the saved plan. The apply waits for the release to go live; if Express
       # Mode's canary rolls it back, this step fails. -lock-timeout waits for a local release.sh.
       - name: Plan and apply
-        if: steps.gate.outputs.go == 'true'
+        if: env.SKIP == ''
         env:
           TAG: ${{ steps.image.outputs.tag }}
         run: |
@@ -99,7 +104,7 @@ jobs:
           terraform -chdir=infra/app apply -input=false -lock-timeout=10m tfplan
 
       - name: Check /health
-        if: steps.gate.outputs.go == 'true'
+        if: env.SKIP == ''
         env:
           TAG: ${{ steps.image.outputs.tag }}
         run: |
