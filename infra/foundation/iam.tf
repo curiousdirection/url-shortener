@@ -1,6 +1,5 @@
-# The two IAM roles that ECS uses for the app. They live here, not in the app stack, so the
-# role that deploys the app (see ../bootstrap) never needs permission to create or change
-# roles. It only needs permission to hand these two to ECS ("iam:PassRole").
+# The two IAM roles ECS uses for the app. They're here, not in the app stack, so the CI
+# deploy role never has to create or change roles. It only passes these two to ECS.
 #
 # The names are fixed (not `name_prefix`) so that the deploy role's PassRole rule can name
 # them exactly.
