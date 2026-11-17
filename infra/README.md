@@ -14,7 +14,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
-| `bootstrap/` | The S3 state bucket, GitHub's sign-in (OIDC) and the two CI roles | You, once |
+| `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once |
 | `foundation/` | The VPC, the database and its password, security groups, the ECS roles | You, from your machine |
 | `app/` | ECR, the log group, the ECS Express service | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
@@ -31,7 +31,7 @@ All three states are in the S3 bucket.
 
 Do these once, in order, on a commit that is on `main`.
 
-1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. If the account already has a GitHub OIDC provider, add `-var create_github_oidc_provider=false` to the apply.
+1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file.
 
    ```bash
    printf 'terraform {\n  backend "local" {}\n}\n' > infra/bootstrap/backend_override.tf
@@ -59,13 +59,28 @@ Do these once, in order, on a commit that is on `main`.
    | `AWS_PLAN_ROLE_ARN` | `plan_role_arn` output | Repository |
    | `AWS_DEPLOY_ROLE_ARN` | `deploy_role_arn` output | Environment `production` |
 
-4. **Apply the foundation.** Read the plan first. It takes 10-15 minutes because it creates the database.
+4. **Create the CI access keys.** The bootstrap made one IAM user per role but no keys, so they stay out of the state. Make each key and store it as a GitHub secret (`gh` and `jq` are used here; the secrets can also be added in Settings). The deploy keys go to the `production` environment from step 3, so only `main` can use them; the plan keys go to the repository.
+
+   ```bash
+   user=$(terraform -chdir=infra/bootstrap output -raw deploy_user_name)
+   key=$(aws iam create-access-key --user-name "$user" --query AccessKey --output json)
+   jq -j .AccessKeyId <<<"$key" | gh secret set AWS_DEPLOY_ACCESS_KEY_ID --env production
+   jq -j .SecretAccessKey <<<"$key" | gh secret set AWS_DEPLOY_SECRET_ACCESS_KEY --env production
+
+   user=$(terraform -chdir=infra/bootstrap output -raw plan_user_name)
+   key=$(aws iam create-access-key --user-name "$user" --query AccessKey --output json)
+   jq -j .AccessKeyId <<<"$key" | gh secret set AWS_PLAN_ACCESS_KEY_ID
+   jq -j .SecretAccessKey <<<"$key" | gh secret set AWS_PLAN_SECRET_ACCESS_KEY
+   unset key
+   ```
+
+5. **Apply the foundation.** Read the plan first. It takes 10-15 minutes because it creates the database.
 
    ```bash
    terraform -chdir=infra/foundation apply
    ```
 
-5. **Stand the app up from your machine**, because CI only updates a service that already exists.
+6. **Stand the app up from your machine**, because CI only updates a service that already exists.
 
    ```bash
    infra/scripts/release.sh
@@ -74,9 +89,9 @@ Do these once, in order, on a commit that is on `main`.
 
    If it fails with "Unable to assume the service linked role", ECS has just created that role for the account: run `release.sh` again a minute later.
 
-6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `app_version` empty) to check that CI can sign in.
+7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `app_version` empty) to check that CI can sign in.
 
-If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"), the repository probably sends GitHub's ID-based `sub` claim (repositories created or renamed after 15 July 2026, [docs](https://docs.github.com/en/actions/reference/security/oidc)). Get the ids with `gh api repos/curiousdirection/url-shortener --jq '.owner.id, .id'` and apply the bootstrap with `-var 'github_oidc_sub_prefix=repo:curiousdirection@<owner id>/url-shortener@<repo id>'`. If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
+If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
 
 ## Deploy
 
@@ -88,6 +103,10 @@ If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"),
 terraform -chdir=infra/foundation plan
 terraform -chdir=infra/foundation apply
 ```
+
+## Rotate the CI access keys
+
+Repeat step 4 (a user can hold two keys, so the old one works until you delete it), then delete the old key: `aws iam delete-access-key --user-name <user> --access-key-id <old key id>`, with the id from `aws iam list-access-keys --user-name <user>`.
 
 ## Rotate the database password
 
@@ -120,7 +139,7 @@ terraform -chdir=infra/app destroy -var app_version=none
 terraform -chdir=infra/foundation destroy
 ```
 
-Express Mode removes what it created. The bootstrap stays; it costs almost nothing. To remove it too, move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
+Express Mode removes what it created. The bootstrap stays; it costs almost nothing. To remove it too, delete the two users' access keys (Terraform can't delete a user that has one), move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
 
 Then check nothing is left; both should print nothing:
 
