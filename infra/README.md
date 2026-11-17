@@ -152,7 +152,7 @@ So pick one of these:
 
   Stopping the tasks is deliberate. A re-run of the Deploy workflow with the same image doesn't replace them, and a new release goes through the canary: the old tasks' errors can trip its alarm and roll the release back, which leaves the old tasks running.
 
-Moving the app to IAM database authentication would remove this outage, because the app would no longer use the password ([ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md), "Alternatives").
+Moving the app to IAM database authentication would remove this outage, because the app would no longer use the password ([ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md), "Alternatives considered").
 
 ## Rollback
 

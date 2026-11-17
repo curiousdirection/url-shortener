@@ -1,6 +1,6 @@
 # The S3 bucket that holds the Terraform state of the foundation and app stacks, one file
 # each (foundation/terraform.tfstate and app/terraform.tfstate). With no secrets in the state
-# (see "Keeping the password out of state" in docs/decisions/0003), it is still worth
+# (see "No password in state" in docs/decisions/0003), it is still worth
 # protecting: whoever can write the state can change what Terraform builds.
 
 data "aws_caller_identity" "current" {}
