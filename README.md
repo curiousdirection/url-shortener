@@ -52,6 +52,8 @@ npm run dev
 
 The `Dockerfile` builds the app image, and [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode and RDS Postgres. A push to `main` that changes the app is tested, built and deployed by GitHub Actions (`.github/workflows/deploy.yml`). The one-time setup, the manual first run and rollback are in [`infra/README.md`](infra/README.md).
 
+What protects the app and its deployment, and what isn't covered yet: [`docs/security.md`](docs/security.md).
+
 ## API
 
 - `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `shortUrl` uses the address the request was sent to. `400` on invalid input, `409` if the alias is taken.
