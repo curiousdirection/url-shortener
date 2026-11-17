@@ -74,19 +74,15 @@ Do these once, in order, on a commit that is on `main`.
 
    If it fails with "Unable to assume the service linked role", ECS has just created that role for the account: run `release.sh` again a minute later.
 
-6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `app_version` empty) to check that CI can sign in and plan.
+6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `app_version` empty) to check that CI can sign in.
 
 If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"), the repository probably sends GitHub's ID-based `sub` claim (repositories created or renamed after 15 July 2026, [docs](https://docs.github.com/en/actions/reference/security/oidc)). Get the ids with `gh api repos/curiousdirection/url-shortener --jq '.owner.id, .id'` and apply the bootstrap with `-var 'github_oidc_sub_prefix=repo:curiousdirection@<owner id>/url-shortener@<repo id>'`. If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
 
 ## Deploy
 
-**Normal case.** Merge to `main`. CI runs the tests and checks; when it passes, the Deploy workflow starts. If the app, its build files or `infra/app/` changed since the deployed commit (the full list is in `infra/scripts/app-changed.sh`), it builds and pushes the image (tagged with the first 7 characters of the commit SHA), applies the app stack and checks `/health`. Otherwise, or if the stack is torn down, it ends green and changes nothing. One deploy runs at a time.
+**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
 
-`infra/scripts/check-terraform.sh` runs the same Terraform checks as CI, if you want them before pushing.
-
-**From your machine.** Commit, then run `infra/scripts/release.sh`. It does the same, and asks you to confirm the apply. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
-
-**Infrastructure changes** (`bootstrap/` or `foundation/`). CI never plans or applies these. Read the plan, then merge and apply it yourself, before any app change that needs it:
+**Infrastructure changes** (`bootstrap/` or `foundation/`): CI never applies these. Plan and apply them yourself, before merging anything that needs them:
 
 ```bash
 terraform -chdir=infra/foundation plan
