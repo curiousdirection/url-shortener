@@ -1,0 +1,33 @@
+# Checks every push to every branch: tests and build (test.yml), Terraform checks and the app
+# plan (terraform.yml). When CI passes on main, deploy.yml starts.
+#
+# All workflows pin actions to commit SHAs. To update one, change the SHA and the version
+# comment together: git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'
+name: CI
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+# One run per branch: a new push cancels the run in progress. Safe, because deploying is a
+# separate workflow (deploy.yml) that starts after CI.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  # Terraform checks and the app plan (terraform.yml).
+  terraform:
+    permissions:
+      contents: read
+      id-token: write # to sign in to AWS; only terraform.yml's plan job uses it
+    uses: ./.github/workflows/terraform.yml

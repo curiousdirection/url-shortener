@@ -1,7 +1,7 @@
 # The Postgres database (Amazon RDS), its firewall and its password.
 
 # A security group is a firewall attached to a resource. This one is for the database. The only
-# rule that lets anything in is db_from_app in app.tf.
+# rule that lets anything in is db_from_app in security.tf.
 resource "aws_security_group" "db" {
   # AWS requires unique names; `name_prefix` lets AWS add a random suffix.
   name_prefix = "${var.name}-db-"
@@ -15,21 +15,42 @@ resource "aws_security_group" "db" {
   }
 }
 
-# A random 32-character password, generated once on the first apply and kept in the state.
-# Alphanumeric only, so it never needs escaping.
-resource "random_password" "db" {
+# The database password, kept out of the plan, the state and the logs. It is generated in
+# memory on every run (ephemeral) and sent only through write-only arguments (`*_wo`), which
+# Terraform never stores. Alphanumeric only, so it never needs escaping.
+#   https://developer.hashicorp.com/terraform/language/block/ephemeral
+ephemeral "random_password" "db" {
   length  = 32
   special = false
 }
 
-# Stores the password in AWS Systems Manager Parameter Store. "SecureString" means it is
-# encrypted. ECS reads it when it starts a task and passes it in as PGPASSWORD; the task
-# execution role may read this one parameter and nothing else. (An RDS-managed password
-# would rotate every 7 days, and running tasks would keep the old one.)
+# The one place the password is stored, encrypted. ECS reads it when a task starts and passes
+# it in as PGPASSWORD. Terraform can't see the stored value, so it only writes a new one when
+# `value_wo_version` changes (or the parameter is created).
 resource "aws_ssm_parameter" "db_password" {
-  name  = "/${var.name}/db_password"
-  type  = "SecureString"
-  value = random_password.db.result
+  name             = "/${var.name}/db_password"
+  type             = "SecureString"
+  value_wo         = ephemeral.random_password.db.result
+  value_wo_version = var.db_password_version
+}
+
+# Reads the password back from the parameter, so the database always gets the same one.
+# Needs ssm:GetParameter and kms:Decrypt.
+ephemeral "aws_ssm_parameter" "db_password" {
+  arn = aws_ssm_parameter.db_password.arn
+}
+
+# Changes whenever the parameter is written. The database uses it as its
+# password_wo_version, so it gets the password again each time. (If a run dies between the
+# two writes, raise db_password_version.)
+resource "terraform_data" "db_password_written" {
+  triggers_replace = [aws_ssm_parameter.db_password.version]
+  input            = parseint(formatdate("YYYYMMDDhhmmss", timestamp()), 10)
+
+  lifecycle {
+    ignore_changes       = [input]
+    replace_triggered_by = [aws_ssm_parameter.db_password]
+  }
 }
 
 # A random suffix for the final snapshot's name. Snapshot names must be unique, so a fixed
@@ -50,7 +71,9 @@ resource "aws_db_instance" "main" {
 
   db_name  = "urlshortener"
   username = "urlshortener"
-  password = random_password.db.result
+  # What the parameter holds; sent again whenever the marker changes (see above).
+  password_wo         = ephemeral.aws_ssm_parameter.db_password.value
+  password_wo_version = terraform_data.db_password_written.output
 
   # Disk size in GiB. gp3 is general-purpose SSD storage. Encrypted at rest.
   allocated_storage = var.db_allocated_storage

@@ -7,12 +7,13 @@ output "url" {
   value = aws_ecs_express_gateway_service.app.ingress_paths[0].endpoint
 }
 
-# Where scripts/release.sh pushes the image.
+# Where scripts/release.sh and the deploy workflow push the image.
 output "ecr_repository_url" {
   value = aws_ecr_repository.app.repository_url
 }
 
-# The database's address and port. It is only reachable from inside the VPC.
-output "rds_endpoint" {
-  value = aws_db_instance.main.endpoint
+# The image tag that is deployed now. CI's plan reuses it, so that the plan only
+# shows real changes to the infrastructure and not a new image.
+output "app_version" {
+  value = var.app_version
 }

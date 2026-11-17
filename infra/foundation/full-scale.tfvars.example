@@ -1,10 +1,6 @@
-# Full-scale sizing for the load in "Assumptions" (root README.md). Reference only, not meant
-# to be applied; see "Cost" in README.md.
-task_cpu    = 2048
-task_memory = 4096
-min_tasks   = 4
-max_tasks   = 12
-
+# Full-scale database sizing for the load in "Assumptions" (root README.md). Reference only,
+# not meant to be applied; see "Cost" in ../README.md. The task sizes are in
+# ../app/full-scale.tfvars.example.
 db_instance_class        = "db.r7g.large"
 db_allocated_storage     = 300
 db_multi_az              = true

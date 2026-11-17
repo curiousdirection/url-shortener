@@ -1,10 +1,17 @@
-# State: Terraform records what it has created in a file (terraform.tfstate). There is no
-# `backend` block here, so that file is kept locally in this folder. It contains the DB
-# password in plain text, so it is gitignored. See README.md ("Local state").
+# The foundation stack: network, database, ECS roles, password. See docs/decisions/0003.
 
 terraform {
-  # Refuse to run with an older Terraform than this.
-  required_version = ">= 1.9"
+  # Write-only arguments (the database password) need 1.11.
+  required_version = ">= 1.11"
+
+  # State in the bucket from ../bootstrap; pass the bucket and region with
+  # `terraform init -backend-config=../backend.hcl`. use_lockfile locks the state while a run
+  # changes it.
+  backend "s3" {
+    key          = "foundation/terraform.tfstate"
+    use_lockfile = true
+    encrypt      = true
+  }
 
   # Plugins ("providers") Terraform downloads on `terraform init`. `~> 6.0` means any 6.x
   # version, but not 7.0. The exact versions used are pinned in .terraform.lock.hcl.
@@ -14,10 +21,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
-    # Generates the random database password.
+    # Generates the random database password (ephemeral needs 3.7).
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.6"
+      version = "~> 3.7"
     }
   }
 }
@@ -32,6 +39,7 @@ provider "aws" {
   default_tags {
     tags = {
       Project   = var.name
+      Stack     = "foundation"
       ManagedBy = "terraform"
     }
   }

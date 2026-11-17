@@ -1,0 +1,45 @@
+# The tests and the build, against a Postgres 16 service. Not run on its own: ci.yml calls it
+# on every push.
+#
+# It needs nothing but to read the code. It has no permission to sign in to AWS (no
+# `id-token`), so the code and packages it runs can't get AWS credentials.
+name: Test
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Adds `-o pipefail`, so `a | b` fails when `a` fails (the default shell only has `-e`).
+    shell: bash
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The same database as `postgres-test` in docker-compose.yml (and .env.test).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: urlshortener_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run migrate:test
+      - run: npm test
+      - run: npm run build

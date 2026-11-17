@@ -1,0 +1,108 @@
+# Deploys the app: build and push the image, apply infra/app, check /health. Starts when CI
+# has passed on main; run it by hand with app_version to roll back.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: "Image tag to roll back to, as shown in an earlier Deploy run. Skips the build."
+        required: false
+        type: string
+
+# Read-only by default. Only the release job can get AWS credentials.
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    # After CI passed on main (not a failed or cancelled run), or by hand.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # One deploy at a time. A new one waits rather than cancelling a running apply; a newer
+    # one replaces one that is still waiting.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04-arm # builds the arm64 image natively
+    environment: production # only main can use it, and only it can assume the deploy role
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      ROLLBACK_TO: ${{ inputs.app_version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }} # the commit CI tested
+          fetch-depth: 0 # to compare with the deployed commit
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          role: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+
+      # The two steps below end the deploy early, changing nothing (the run stays green). Each
+      # sets SKIP, and every later step only runs while SKIP is unset.
+
+      # CI never recreates a torn-down stack; release.sh does.
+      - name: Skip if the app is torn down
+        run: |
+          if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
+            grep -q "No state file was found" err.txt || { cat err.txt >&2; exit 1; }
+          fi
+          if ! grep -qx 'aws_ecs_express_gateway_service.app' <<<"${list:-}"; then
+            echo "SKIP=torn-down" >> "$GITHUB_ENV"
+            echo "### Deploy skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Docs or tests alone don't deploy. Compares the deployed commit with this one. A manual
+      # rollback skips this check.
+      - name: Skip if nothing in the app changed
+        if: env.SKIP == '' && inputs.app_version == ''
+        run: |
+          deployed="$(terraform -chdir=infra/app output -raw app_version)"
+          if [ "$(infra/scripts/app-changed.sh "$deployed" HEAD)" = false ]; then
+            echo "SKIP=unchanged" >> "$GITHUB_ENV"
+            echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build and push the image
+        id: image
+        if: env.SKIP == ''
+        run: |
+          repo="$(terraform -chdir=infra/app output -raw ecr_repository_url)"
+          tag="${ROLLBACK_TO:-$(infra/scripts/image-tag.sh)}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          infra/scripts/push-image.sh "$repo" "$tag" ${ROLLBACK_TO:+--no-build}
+
+      # Apply exactly the saved plan. The apply waits for the release to go live; if Express
+      # Mode's canary rolls it back, this step fails. -lock-timeout waits for a local release.sh.
+      - name: Plan and apply
+        if: env.SKIP == ''
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          terraform -chdir=infra/app plan -input=false -lock-timeout=10m -no-color \
+            -var "app_version=$TAG" -out=tfplan | tee plan.txt
+          { echo '### Terraform plan'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          terraform -chdir=infra/app apply -input=false -lock-timeout=10m tfplan
+
+      - name: Check /health
+        if: env.SKIP == ''
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          url="$(terraform -chdir=infra/app output -raw url)"
+          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors "$url/health"
+          echo "### Deployed \`$TAG\` to $url${ROLLBACK_TO:+ (rollback)}" >> "$GITHUB_STEP_SUMMARY"
