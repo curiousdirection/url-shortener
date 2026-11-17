@@ -27,5 +27,5 @@ jobs:
   terraform:
     permissions:
       contents: read
-      id-token: write # only terraform.yml's plan job uses it
+      id-token: write # to sign in to AWS; only terraform.yml's plan job uses it
     uses: ./.github/workflows/terraform.yml
