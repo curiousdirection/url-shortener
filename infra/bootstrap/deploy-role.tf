@@ -8,17 +8,23 @@ resource "aws_iam_role" "deploy" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Federated = local.oidc_provider_arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "${local.sub_repo}:environment:${var.github_environment}"
-          # A second lock besides the environment's branch rule, as AWS recommends.
-          "token.actions.githubusercontent.com:ref" = "refs/heads/main"
-        }
-      }
+      Principal = { AWS = aws_iam_user.deploy.arn }
+      Action    = "sts:AssumeRole"
     }]
+  })
+}
+
+# Its access key is only given to the `production` environment, which only main can use.
+resource "aws_iam_user" "deploy" {
+  name = "github-deploy-${var.name}"
+}
+
+resource "aws_iam_user_policy" "deploy_assume_role" {
+  name = "assume-deploy-role"
+  user = aws_iam_user.deploy.name
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Resource = aws_iam_role.deploy.arn }]
   })
 }
 

@@ -16,6 +16,15 @@ output "plan_role_arn" {
   value = aws_iam_role.plan.arn
 }
 
+# The IAM users to make the access keys for (see "Set up and first run" in ../README.md).
+output "deploy_user_name" {
+  value = aws_iam_user.deploy.name
+}
+
+output "plan_user_name" {
+  value = aws_iam_user.plan.name
+}
+
 output "region" {
   value = var.region
 }

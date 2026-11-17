@@ -4,6 +4,11 @@ name: Terraform
 
 on:
   workflow_call:
+    secrets:
+      AWS_PLAN_ACCESS_KEY_ID:
+        required: false
+      AWS_PLAN_SECRET_ACCESS_KEY:
+        required: false
 
 permissions:
   contents: read
@@ -30,7 +35,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
@@ -40,6 +44,8 @@ jobs:
       - uses: ./.github/actions/setup-terraform
         with:
           role: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          access-key-id: ${{ secrets.AWS_PLAN_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.AWS_PLAN_SECRET_ACCESS_KEY }}
       - run: |
           infra/scripts/plan-app.sh | tee plan.txt
           { echo '### Terraform plan: app'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

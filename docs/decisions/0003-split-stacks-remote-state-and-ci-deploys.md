@@ -1,6 +1,6 @@
 # 3. Split the Terraform stacks, keep state in S3 and deploy from CI
 
-Date: 2026-11-14. Status: accepted; amends [0002](0002-deploy-with-ecs-express-mode.md).
+Date: 2026-11-14. Status: accepted; amends [0002](0002-deploy-with-ecs-express-mode.md). The OIDC sign-in is superseded by [0004](0004-access-keys-instead-of-oidc.md).
 
 ## Context
 
@@ -14,7 +14,7 @@ We want a push to `main` to ship the app. CI can't use a local state file and sh
 - **State in S3**, encrypted, versioned, private, with S3 native locking. The bootstrap's own state starts local, because the bucket doesn't exist yet, and moves into the bucket after the first apply.
 - **No password in state.** It is generated as an ephemeral value and sent with write-only arguments, so it never reaches the plan, the state or the logs.
 - **CI applies only the app stack**, on a push to `main` that changes the app. You plan and apply the foundation from your machine.
-- **GitHub signs in with OIDC, with two roles.** The deploy role is limited to the `production` environment on `main` and can only push images and update the one service. The plan role is for CI on any branch, is read-only, plans only the app stack and is denied every secret.
+- **GitHub signs in with two roles** (first with OIDC, then access keys: [0004](0004-access-keys-instead-of-oidc.md)). The deploy role is limited to the `production` environment on `main` and can only push images and update the one service. The plan role is for CI on any branch, is read-only, plans only the app stack and is denied every secret.
 
 How each part works is in the code comments and [infra/README.md](../../infra/README.md).
 
@@ -22,7 +22,7 @@ How each part works is in the code comments and [infra/README.md](../../infra/RE
 
 - **A release can't break the foundation.** A bad commit or a leaked token can at worst push an image and update one service.
 - **No secrets in state.** Not storing the password is a stronger answer than locking down the bucket that holds it.
-- **No stored keys.** Each run gets credentials that expire within an hour.
+- **Short-lived credentials.** Each run gets credentials that expire within an hour.
 - **A person applies every infrastructure change**, after reading its plan.
 
 ## Consequences

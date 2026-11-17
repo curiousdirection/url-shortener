@@ -27,7 +27,7 @@ jobs:
 
   # Terraform checks and the app plan (terraform.yml).
   terraform:
-    permissions:
-      contents: read
-      id-token: write # to sign in to AWS; only terraform.yml's plan job uses it
     uses: ./.github/workflows/terraform.yml
+    secrets:
+      AWS_PLAN_ACCESS_KEY_ID: ${{ secrets.AWS_PLAN_ACCESS_KEY_ID }}
+      AWS_PLAN_SECRET_ACCESS_KEY: ${{ secrets.AWS_PLAN_SECRET_ACCESS_KEY }}

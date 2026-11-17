@@ -7,14 +7,23 @@ resource "aws_iam_role" "plan" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Federated = local.oidc_provider_arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-        # A push to any branch of this repository.
-        StringLike = { "token.actions.githubusercontent.com:sub" = "${local.sub_repo}:ref:refs/heads/*" }
-      }
+      Principal = { AWS = aws_iam_user.plan.arn }
+      Action    = "sts:AssumeRole"
     }]
+  })
+}
+
+# Its access key is a repository secret, so CI on any branch can use it.
+resource "aws_iam_user" "plan" {
+  name = "github-plan-${var.name}"
+}
+
+resource "aws_iam_user_policy" "plan_assume_role" {
+  name = "assume-plan-role"
+  user = aws_iam_user.plan.name
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Resource = aws_iam_role.plan.arn }]
   })
 }
 
