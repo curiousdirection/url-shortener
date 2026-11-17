@@ -132,7 +132,27 @@ The database never gets a password of its own: whenever it is written, it is giv
 
 Applying the foundation reads the parameter, so you need `ssm:GetParameter` and `kms:Decrypt` (admin has them). CI doesn't touch it.
 
-Running tasks keep the old password, so they fail on new connections until they are replaced. Release a new commit straight after (or do it while the stack is torn down). A re-run of the same version doesn't replace the tasks.
+**Running tasks keep the old password.** ECS hands a task the password once, when it starts. After a rotation, connections a task already holds keep working, but every new one fails, so the app returns errors until all tasks are replaced. Nothing rotates by itself; only raising `db_password_version` does this.
+
+So pick one of these:
+
+- **Rotate while the stack is torn down.** Nothing is running, so nothing breaks. (Recreating the stack also gives a new password.)
+- **Rotate a running stack and accept a short outage** (usually 1-3 minutes). Do it at a quiet time:
+
+  1. Apply the foundation with the new version, as above.
+  2. Stop the running tasks straight away. The service starts new ones, which read the new password:
+
+     ```bash
+     for task in $(aws ecs list-tasks --region eu-north-1 --cluster default --service-name url-shortener --query 'taskArns[]' --output text); do
+       aws ecs stop-task --region eu-north-1 --cluster default --task "$task" --reason "DB password rotated" >/dev/null
+     done
+     ```
+
+  3. Wait until `curl $(terraform -chdir=infra/app output -raw url)/health` answers `{"status":"ok"}` again.
+
+  Stopping the tasks is deliberate. A re-run of the Deploy workflow with the same image doesn't replace them, and a new release goes through the canary: the old tasks' errors can trip its alarm and roll the release back, which leaves the old tasks running.
+
+Moving the app to IAM database authentication would remove this outage, because the app would no longer use the password ([ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md), "Alternatives").
 
 ## Rollback
 
