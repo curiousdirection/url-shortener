@@ -76,7 +76,7 @@ Do these once, in order, on a commit that is on `main`.
 
 6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `app_version` empty) to check that CI can sign in and plan.
 
-If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"), the repository probably sends GitHub's ID-based `sub` claim (repositories created or renamed after 15 July 2026, [docs](https://docs.github.com/en/actions/reference/security/oidc)). Get the ids with `gh api repos/curiousdirection/url-shortener --jq '.owner.id, .id'` and apply the bootstrap with `-var 'github_oidc_sub_prefix=repo:curiousdirection@<owner id>/url-shortener@<repo id>'`. If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/github.tf` and apply the bootstrap again: the permission lists haven't been run against a real account yet.
+If CI can't sign in ("Not authorized to perform sts:AssumeRoleWithWebIdentity"), the repository probably sends GitHub's ID-based `sub` claim (repositories created or renamed after 15 July 2026, [docs](https://docs.github.com/en/actions/reference/security/oidc)). Get the ids with `gh api repos/curiousdirection/url-shortener --jq '.owner.id, .id'` and apply the bootstrap with `-var 'github_oidc_sub_prefix=repo:curiousdirection@<owner id>/url-shortener@<repo id>'`. If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
 
 ## Deploy
 
