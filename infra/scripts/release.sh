@@ -34,22 +34,6 @@ if [ -z "$REPO" ]; then
   "${tf[@]}" apply -auto-approve -target=aws_ecr_repository.app -var "app_version=$VERSION"
   REPO="$("${tf[@]}" output -raw ecr_repository_url)"
 fi
-# <account>.dkr.ecr.<region>.amazonaws.com/<name>
-REGISTRY="${REPO%%/*}"
-REGION="$(cut -d. -f4 <<<"$REGISTRY")"
-
-# Tags are immutable, so an image that is already there is kept. Only "no such image" means
-# it is missing; any other error stops the script with its message.
-if out="$(aws ecr describe-images --region "$REGION" --repository-name "${REPO#*/}" --image-ids "imageTag=$VERSION" 2>&1)"; then
-  echo "Image $VERSION is already in ECR."
-elif grep -q ImageNotFoundException <<<"$out"; then
-  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
-  # Arm, to match cpu_architecture in infra/app/main.tf (slower on an x86 machine, which emulates it).
-  docker build --platform linux/arm64 --build-arg NODE_VERSION="$(cat .node-version)" -t "$REPO:$VERSION" .
-  docker push "$REPO:$VERSION"
-else
-  echo "$out" >&2
-  exit 1
-fi
+infra/scripts/push-image.sh "$REPO" "$VERSION"
 
 "${tf[@]}" apply -var "app_version=$VERSION"

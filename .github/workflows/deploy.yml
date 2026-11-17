@@ -18,6 +18,7 @@ on:
       - .node-version
       - .terraform-version
       - infra/app/**
+      - infra/scripts/push-image.sh
       - .github/workflows/deploy.yml
       - .github/workflows/test.yml
       - .github/actions/setup-terraform/**
@@ -94,7 +95,7 @@ jobs:
           fi
 
       # Tag: the first 7 characters of the commit SHA, as in release.sh, so either can reuse the
-      # other's image. Tags are immutable, so an existing image is never rebuilt.
+      # other's image.
       - name: Build and push the image
         id: image
         if: steps.gate.outputs.deployed == 'true'
@@ -103,18 +104,7 @@ jobs:
           sha="$(git rev-parse HEAD)"
           tag="${ROLLBACK_TO:-${sha:0:7}}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          # Only "no such image" means missing; any other error fails with its message.
-          if out="$(aws ecr describe-images --repository-name "${repo#*/}" --image-ids "imageTag=$tag" 2>&1)"; then
-            echo "Image $tag is already in ECR."
-          elif ! grep -q ImageNotFoundException <<<"$out"; then
-            echo "$out" >&2; exit 1
-          elif [ -n "$ROLLBACK_TO" ]; then
-            echo "::error::There is no image tagged $tag in ECR to roll back to."; exit 1
-          else
-            aws ecr get-login-password | docker login --username AWS --password-stdin "${repo%%/*}"
-            docker build --platform linux/arm64 --build-arg NODE_VERSION="$(cat .node-version)" -t "$repo:$tag" .
-            docker push "$repo:$tag"
-          fi
+          infra/scripts/push-image.sh "$repo" "$tag" ${ROLLBACK_TO:+--no-build}
 
       # Apply exactly the saved plan. The apply waits for the release to go live; if Express
       # Mode's canary rolls it back, this step fails. -lock-timeout waits for a local release.sh.
