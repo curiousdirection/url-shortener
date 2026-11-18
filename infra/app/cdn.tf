@@ -1,19 +1,28 @@
 # CloudFront in front of the function. Why: docs/decisions/0007-cdn-cloudfront.md.
 
 locals {
-  # CloudFront's cache rules. These are AWS's ready-made ones, by their fixed IDs, because CI
-  # isn't allowed to create its own:
-  #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
-  # caching_optimized (redirects): keeps each path as long as the app's Cache-Control says, but
-  # always at least 1 second, even with no-store. That's why /health uses caching_disabled.
-  # caching_disabled (/api/* and /health): never caches.
-  cache_policy_caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
-  cache_policy_caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-  # Forwards everything but Host: the function URL needs its own.
-  origin_request_policy_all_viewer_except_host = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
-
   function_url_host = trimsuffix(trimprefix(aws_lambda_function_url.app.function_url, "https://"), "/")
   origin_id         = "function-url"
+}
+
+# AWS's ready-made CloudFront policies, looked up by name. CI isn't allowed to create its own.
+#   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
+
+# For redirects: keeps each one as long as the app's Cache-Control says. It always keeps a
+# response for at least 1 second, even one marked no-store, so /health uses the next one instead.
+data "aws_cloudfront_cache_policy" "caching_optimized" {
+  name = "Managed-CachingOptimized"
+}
+
+# For /api/* and /health: keeps nothing.
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+# For /api/*: passes on everything the visitor sent except Host, which the function URL needs
+# to be its own.
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
 }
 
 # Signs every request to the function URL, so only CloudFront can call it.
@@ -69,7 +78,7 @@ resource "aws_cloudfront_distribution" "app" {
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
     compress               = true
-    cache_policy_id        = local.cache_policy_caching_optimized
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
   }
 
   # The API, never cached. https-only, because a redirected POST can lose its body.
@@ -79,8 +88,8 @@ resource "aws_cloudfront_distribution" "app" {
     viewer_protocol_policy   = "https-only"
     allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = local.cache_policy_caching_disabled
-    origin_request_policy_id = local.origin_request_policy_all_viewer_except_host
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
 
     # For shortUrl (src/app.ts).
     function_association {
@@ -96,7 +105,7 @@ resource "aws_cloudfront_distribution" "app" {
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = local.cache_policy_caching_disabled
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
   }
 
   restrictions {

@@ -43,6 +43,15 @@ locals {
       Action   = "cloudfront:ListTagsForResource"
       Resource = ["${local.cloudfront_arn}:distribution/*", local.cdn_function_arn]
     },
+    # AWS's ready-made cache and origin request policies, which cdn.tf looks up by name.
+    {
+      Effect = "Allow"
+      Action = [
+        "cloudfront:ListCachePolicies", "cloudfront:GetCachePolicy",
+        "cloudfront:ListOriginRequestPolicies", "cloudfront:GetOriginRequestPolicy",
+      ]
+      Resource = "*"
+    },
     # The web ACL, in us-east-1. WAF adds an id after the name, hence `*`.
     {
       Effect   = "Allow"
