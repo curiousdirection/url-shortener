@@ -4,7 +4,7 @@ Date: 2026-11-18. Status: accepted.
 
 ## Context
 
-The app runs on ECS Express Mode with RDS Postgres ([0002](0002-deploy-with-ecs-express-mode.md)). We compared it with AWS Lambda and DynamoDB, for both the practice deployment and the full scale in "Assumptions" (root README). Neither the README nor the infra docs give a request rate. This comparison assumes about 1 billion redirects a day (about 11,600 per second), worked back from the load balancer estimate in "Cost" in [infra/README.md](../../infra/README.md). Prices are on-demand `eu-north-1`, from the AWS Price List, November 2026.
+The app runs on ECS Express Mode with RDS Postgres ([0002](0002-deploy-with-ecs-express-mode.md)). We compared it with AWS Lambda and DynamoDB, for both the practice deployment and the full scale in "Assumptions" (root README). Prices are on-demand `eu-north-1`, from the AWS Price List, November 2026.
 
 ## Decision
 
