@@ -35,3 +35,17 @@ provider "aws" {
     }
   }
 }
+
+# The web ACL must be in us-east-1 (waf.tf).
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project   = var.name
+      Stack     = "app"
+      ManagedBy = "terraform"
+    }
+  }
+}

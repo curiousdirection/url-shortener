@@ -1,4 +1,5 @@
 # The app: one Lambda function (a zip of the bundled code), its function URL and its log group.
+# CloudFront in front of it: cdn.tf.
 #
 # The table and the function's role come from the foundation stack (see the data source below).
 
@@ -64,28 +65,29 @@ resource "aws_lambda_function" "app" {
   }
 }
 
-# The public HTTPS address. Auth type NONE means anyone can call it; the CDN PR will switch it to
-# AWS_IAM, so that only the CDN can (see docs/security.md).
+# The function's own address. AWS_IAM: only signed calls, so only CloudFront (cdn.tf).
 resource "aws_lambda_function_url" "app" {
   function_name      = aws_lambda_function.app.function_name
-  authorization_type = "NONE"
+  authorization_type = "AWS_IAM"
 }
 
-# With auth type NONE, the function's resource policy must still allow the call. Two statements
-# are needed since October 2025: one for the URL, one for the invoke through it.
+# Allow this distribution only: one statement for the URL, one for the invoke through it.
 #   https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+#   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-lambda.html
 resource "aws_lambda_permission" "url" {
-  statement_id           = "FunctionURLAllowPublicAccess"
+  statement_id           = "AllowCloudFrontInvokeFunctionUrl"
   function_name          = aws_lambda_function.app.function_name
   action                 = "lambda:InvokeFunctionUrl"
-  principal              = "*"
-  function_url_auth_type = "NONE"
+  principal              = "cloudfront.amazonaws.com"
+  source_arn             = aws_cloudfront_distribution.app.arn
+  function_url_auth_type = "AWS_IAM"
 }
 
 resource "aws_lambda_permission" "invoke" {
-  statement_id             = "FunctionURLInvokeAllowPublicAccess"
+  statement_id             = "AllowCloudFrontInvokeFunction"
   function_name            = aws_lambda_function.app.function_name
   action                   = "lambda:InvokeFunction"
-  principal                = "*"
+  principal                = "cloudfront.amazonaws.com"
+  source_arn               = aws_cloudfront_distribution.app.arn
   invoked_via_function_url = true
 }

@@ -27,17 +27,26 @@ const createSchema = z.object({
     .optional(),
 });
 
-// The address the client called. Behind a proxy the request can arrive as plain http, and
-// X-Forwarded-Proto says whether the client used https. A Lambda function URL sets it.
+// The address the client called. Behind CloudFront, X-Forwarded-Host holds it (forwarded-host.js).
 const requestOrigin = (c: Context) => {
-  const { protocol, host } = new URL(c.req.url);
-  return c.req.header("x-forwarded-proto") === "https" ? `https://${host}` : `${protocol}//${host}`;
+  const url = new URL(c.req.url);
+  const forwarded = c.req.header("x-forwarded-host");
+  return forwarded ? `${url.protocol}//${forwarded}` : url.origin;
 };
+
+// CloudFront caches a redirect for a day, browsers don't (so a takedown needs only an
+// invalidation), and a 404 for 10 seconds, so a new link works soon.
+const CACHE_REDIRECT = "public, max-age=0, s-maxage=86400";
+const CACHE_NOT_FOUND = "public, max-age=10";
+const CACHE_NONE = "no-store";
 
 export function buildApp(service: UrlService) {
   const app = new Hono();
 
-  app.get("/health", (c) => c.json({ status: "ok" }));
+  app.get("/health", (c) => {
+    c.header("Cache-Control", CACHE_NONE);
+    return c.json({ status: "ok" });
+  });
 
   app.post("/api/urls", zValidator("json", createSchema), async (c) => {
     const { url, alias } = c.req.valid("json");
@@ -53,7 +62,11 @@ export function buildApp(service: UrlService) {
   app.get("/:code", async (c) => {
     const code = c.req.param("code");
     const longUrl = CODE_PATTERN.test(code) ? await service.resolve(code) : null;
-    if (!longUrl) return c.json({ error: "not found" }, 404);
+    if (!longUrl) {
+      c.header("Cache-Control", CACHE_NOT_FOUND);
+      return c.json({ error: "not found" }, 404);
+    }
+    c.header("Cache-Control", CACHE_REDIRECT);
     return c.redirect(longUrl, 302);
   });
 

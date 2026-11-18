@@ -1,10 +1,12 @@
 # Deploying to AWS
 
-Runs the app as one [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) function with a function URL, and keeps the links in a DynamoDB table. Why: [ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md). Practice uses the defaults in the `variables.tf` files; the `full-scale.tfvars.example` files show full-scale settings (reference only).
+Runs the app as one [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) function with a function URL, behind an [Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Introduction.html) distribution, and keeps the links in a DynamoDB table. Why: [ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md) and [ADR 0007](../docs/decisions/0007-cdn-cloudfront.md). Practice uses the defaults in the `variables.tf` files; the `full-scale.tfvars.example` files show full-scale settings (reference only).
 
 ```
-Internet -> function URL (HTTPS) -> Lambda function -> DynamoDB table
+Internet -> CloudFront (*.cloudfront.net; AWS WAF rate limits at full scale) -> function URL (signed) -> Lambda function -> DynamoDB table
 ```
+
+CloudFront is the only way in: the function URL refuses unsigned calls.
 
 A push to `main` that changes the app is deployed by GitHub Actions. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md).
 
@@ -14,7 +16,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 | --- | --- | --- |
 | `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
 | `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
-| `app/` | The Lambda function, its function URL, its log group | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
+| `app/` | The Lambda function, its function URL, its log group, the CloudFront distribution and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 All three states are in the S3 bucket.
 
@@ -79,7 +81,7 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
    terraform -chdir=infra/foundation apply
    ```
 
-6. **Create the function from your machine**, because CI only updates a function that already exists.
+6. **Create the function and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
 
    ```bash
    infra/scripts/release.sh # yes
@@ -92,7 +94,7 @@ If a role is refused a `lambda:` or `logs:` action, add it in `bootstrap/deploy-
 
 ## Change the bootstrap
 
-CI never applies the bootstrap, so you do, after any change to its `.tf` files. This includes the first deploy after moving from ECS and RDS: the CI roles' permissions changed from ECS and ECR to Lambda, and CI will be refused until you apply them.
+CI never applies the bootstrap, so you do, after any change to its `.tf` files. 
 
 ```bash
 terraform -chdir=infra/bootstrap plan
@@ -104,6 +106,16 @@ The access keys and GitHub settings stay as they are.
 ## Deploy
 
 **App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
+
+A change to CloudFront takes a few minutes to reach every location; the Deploy workflow's `/health` check runs after that.
+
+**Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
+
+**Take down a link:** delete it from the table, then clear CloudFront's copy:
+
+```bash
+aws cloudfront create-invalidation --distribution-id "$(terraform -chdir=infra/app output -raw distribution_id)" --paths "/<code>"
+```
 
 **Infrastructure changes** (`bootstrap/` or `foundation/`): CI never applies these. Plan and apply them yourself, before merging anything that needs them:
 
@@ -134,6 +146,8 @@ terraform -chdir=infra/app destroy -var app_version=none -var package_hash=none
 terraform -chdir=infra/foundation destroy
 ```
 
+Destroying the app takes several minutes, because CloudFront disables and then deletes the distribution.
+
 If the table has deletion protection on, set `table_deletion_protection = false` in `infra/foundation/terraform.tfvars` and apply first. Destroying the table deletes the links, and its point-in-time backups with them.
 
 The bootstrap stays; it costs almost nothing. To remove it too, delete the two users' access keys (Terraform can't delete a user that has one), move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
@@ -150,8 +164,10 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, and the function URL is free.
-- **Full scale, without a CDN:** about $12,000/month, about twice the old ECS and RDS stack (about $6,200): Lambda requests ~$6,100 (about 30 billion a month), data transfer out ~$2,650, DynamoDB ~$2,300, Lambda run time ~$800.
-- **Full scale, behind a CDN** that answers most redirects from its cache, the origin costs about $1.2k/month, about the same as ECS and RDS did. That is why the design assumes a CDN ([ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md)).
-
-Set a budget alert in the AWS console.
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
+- **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
+  - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
+  - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
+  - **Origin Shield:** $0.009 per 10,000 requests in Europe, about $2,700/month if 10% of requests reach it.
+  - **Origin (Lambda, DynamoDB):** about $1.2k/month, assuming 90% of redirects come from the cache (a guess; [ADR 0007](../docs/decisions/0007-cdn-cloudfront.md)).
+- **Full scale, without a CDN**, for comparison: about $12,000/month, about twice the old ECS and RDS stack (about $6,200): Lambda requests ~$6,100 (about 30 billion a month), data transfer out ~$2,650, DynamoDB ~$2,300, Lambda run time ~$800.

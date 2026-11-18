@@ -2,3 +2,9 @@
 # not meant to be applied; see "Cost" in ../README.md. The table settings are in
 # ../foundation/full-scale.tfvars.example.
 memory_size = 512
+
+# Rate limits by IP (AWS WAF).
+rate_limiting = true
+
+# Origin Shield (see the variable).
+origin_shield_region = "eu-west-2"

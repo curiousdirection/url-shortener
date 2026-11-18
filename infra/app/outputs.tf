@@ -1,10 +1,18 @@
 # Values printed at the end of `terraform apply`. Show them again any time with
 # `terraform output` (or `terraform output -raw url` for just one, without quotes).
 
-# The public HTTPS address, e.g. https://abc123.lambda-url.eu-north-1.on.aws. Lambda makes up
-# the id when it creates the URL, so it is only known after the first apply. The trailing slash
-# is dropped, so "$url/health" works.
+# The public address, e.g. https://d111111abcdef8.cloudfront.net (no trailing slash).
 output "url" {
+  value = "https://${aws_cloudfront_distribution.app.domain_name}"
+}
+
+# For cache invalidations ("Take down a link" in infra/README.md).
+output "distribution_id" {
+  value = aws_cloudfront_distribution.app.id
+}
+
+# The function's own address. Only CloudFront can call it; use `url`.
+output "function_url" {
   value = trimsuffix(aws_lambda_function_url.app.function_url, "/")
 }
 
