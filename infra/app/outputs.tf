@@ -8,6 +8,11 @@ output "url" {
   value = "https://${aws_cloudfront_distribution.app.domain_name}"
 }
 
+# For cache invalidations ("Take down a link" in infra/README.md).
+output "distribution_id" {
+  value = aws_cloudfront_distribution.app.id
+}
+
 # The function's own address. Only CloudFront can call it (auth type AWS_IAM), so use `url`.
 output "function_url" {
   value = trimsuffix(aws_lambda_function_url.app.function_url, "/")
