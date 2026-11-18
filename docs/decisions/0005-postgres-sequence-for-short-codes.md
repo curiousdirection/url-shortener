@@ -19,7 +19,7 @@ Take the number from a Postgres sequence (`nextval('url_code_seq')`) in the same
 ## Alternatives considered
 
 - **Redis `INCR`** (the first version): see above.
-- **Durable Redis** (ElastiCache with synchronous writes, or MemoryDB): no rewind, but still a second service on every create.
+- **Durable Redis** (ElastiCache with synchronous writes, or MemoryDB): survives failovers, but still a second service on every create.
 - **Random codes, inserted only if free:** no counter at all. Codes would be 7 characters instead of 6 at 1 billion links, and a create occasionally retries.
 - **Block allocation** (each instance reserves 1,000 numbers at a time): only needed when one counter can't keep up with creates.
 
