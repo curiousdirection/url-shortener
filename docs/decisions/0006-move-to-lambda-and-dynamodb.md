@@ -39,6 +39,7 @@ How to run it is in [infra/README.md](../../infra/README.md).
   Retries per day:     10,000,000 creates × 0.000284 ≈ 2,840
   ```
 - **Cold starts.** A request that needs a new copy of the function waits a few hundred milliseconds while it starts. That's common at practice size, and rare at full scale behind a CDN.
+- **Ad-hoc questions about links need more setup.** Postgres answered them with SQL; DynamoDB needs an index planned in advance, or an export to S3 queried with Athena. Click counts come from the CDN's logs on either stack.
 - **The function URL is public until the CDN is added** ([docs/security.md](../security.md)).
 
 ## Alternatives considered
