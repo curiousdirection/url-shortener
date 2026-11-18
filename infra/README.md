@@ -107,11 +107,11 @@ The access keys and GitHub settings stay as they are.
 
 **App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
 
-A change to the distribution or its web ACL waits for CloudFront to deploy it everywhere, a few minutes. The Deploy workflow's `/health` check goes through CloudFront, so it runs after that.
+A change to CloudFront takes a few minutes to reach every location; the Deploy workflow's `/health` check runs after that.
 
-**Rate limits:** off for practice, on at full scale (`rate_limiting` in `infra/app/variables.tf`). To try them, put `rate_limiting = true` in `infra/app/terraform.tfvars` and run `release.sh`; set it back afterwards. A client over a limit gets `429` for the rest of the 5 minutes. The limits are `rate_limit_all` (1,000 requests) and `rate_limit_create` (20 `POST`s to `/api/*`) in `infra/app/variables.tf`; change them in `terraform.tfvars` or the defaults. Rate-limit hits show in the web ACL's sampled requests in the AWS WAF console (region us-east-1).
+**Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
 
-**Take down a link:** delete it from the table, then clear CloudFront's copy of the redirect (it keeps it for up to a day). Browsers don't keep a copy (`max-age=0`), so the invalidation is enough.
+**Take down a link:** delete it from the table, then clear CloudFront's copy:
 
 ```bash
 aws cloudfront create-invalidation --distribution-id "$(terraform -chdir=infra/app output -raw distribution_id)" --paths "/<code>"
