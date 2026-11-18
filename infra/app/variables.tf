@@ -68,6 +68,17 @@ variable "rate_limiting" {
   default     = false
 }
 
+variable "system_log_level" {
+  description = "Lambda's own log lines: START, END and REPORT (with timings) for every request. INFO keeps them; WARN keeps only warnings and errors. WARN at full scale, where they'd cost thousands a month in CloudWatch."
+  type        = string
+  default     = "INFO"
+
+  validation {
+    condition     = contains(["DEBUG", "INFO", "WARN"], var.system_log_level)
+    error_message = "system_log_level must be DEBUG, INFO or WARN."
+  }
+}
+
 variable "memory_size" {
   description = "MB of memory for the function. Lambda gives CPU in proportion, so more memory is also faster."
   type        = number

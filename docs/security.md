@@ -19,7 +19,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 - **No credentials in the code.** The function gets short-lived credentials from its role. The table name is its only setting.
 - **No overwrites.** A link is written only if its code is free (a conditional write), so an existing link can't be replaced by creating another with the same code or alias.
 - **Random codes.** Codes come from `node:crypto`, so they can't be guessed from earlier ones.
-- **Quiet logs.** Only warnings and errors are logged, so requests are not written to the logs.
+- **No request data in the logs.** The app doesn't log requests. Lambda's own per-request lines hold only ids and timings.
 
 ### Supply chain
 

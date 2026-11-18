@@ -54,13 +54,11 @@ resource "aws_lambda_function" "app" {
     }
   }
 
-  # By default Lambda writes START, END and REPORT lines for every request. At full scale that is
-  # terabytes a month in CloudWatch (thousands of dollars), so only warnings and errors are kept.
   # Log levels need the JSON format.
   #   https://aws.amazon.com/blogs/compute/introducing-advanced-logging-controls-for-aws-lambda-functions/
   logging_config {
     log_format       = "JSON"
-    system_log_level = "WARN"
+    system_log_level = var.system_log_level
     log_group        = aws_cloudwatch_log_group.app.name
   }
 }
