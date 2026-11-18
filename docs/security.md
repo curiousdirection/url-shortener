@@ -54,5 +54,5 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Branch protection | Unreviewed or unchecked code reaching `main` | GitHub settings: require a pull request and passing checks |
 | Abuse of the shortener | Anyone can create links (no auth, no rate limit), so it can hide phishing or malware links | Rate limiting, AWS WAF, a URL blocklist |
-| Key rotation | Stale or leaked CI access keys, which don't expire | A reminder to rotate by hand (`infra/README.md`), or OIDC if the account allows it |
+| Key rotation | Stale or leaked CI access keys, which don't expire | A reminder to rotate by hand (`infra/README.md`), or OIDC, which this account's Free plan blocks ([ADR 0004](decisions/0004-access-keys-instead-of-oidc.md)) |
 | Account monitoring | Suspicious API calls or access | CloudTrail, GuardDuty |
