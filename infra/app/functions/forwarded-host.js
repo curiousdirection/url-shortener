@@ -1,5 +1,6 @@
-// Runs on /api/*. Copies the viewer's Host into X-Forwarded-Host for src/app.ts, since the function
-// gets its own host instead. Always overwrites the header, so a viewer can't fake it.
+// Runs inside CloudFront on /api/* requests. CloudFront replaces Host with our Lambda's own
+// address, so this first copies the visitor's Host into X-Forwarded-Host (src/app.ts reads it for
+// shortUrl). It always overwrites the header, so a visitor can't set it to another address.
 function handler(event) {
   var request = event.request;
   if (request.headers.host) {
