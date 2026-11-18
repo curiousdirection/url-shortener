@@ -2,7 +2,6 @@
 # Build the app zip and apply infra/app. For the first run and releases from your machine; CI
 # does the same on main. See "Deploy" in infra/README.md.
 # Usage: infra/scripts/release.sh   (needs AWS credentials, Node and the setup in that README)
-# The first run waits 5 to 15 minutes for the new CloudFront distribution. That's normal.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
