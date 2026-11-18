@@ -35,8 +35,8 @@ locals {
   lambda_role_arn = "arn:aws:iam::${local.account_id}:role/${var.name}-lambda"
 }
 
-# Only what `terraform apply` in infra/app needs. It can update the function, its URL and its
-# log group but not create or delete them, so a change that would replace the function fails in
+# Only what `terraform apply` in infra/app needs. It can update the function, its URL, its log group and the CDN
+# but not create or delete them, so a change that would replace the function fails in
 # CI instead of taking the app down.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
@@ -54,7 +54,7 @@ resource "aws_iam_role_policy" "deploy" {
       { Effect = "Allow", Action = "s3:GetObject", Resource = local.foundation_state },
 
       # The one function: read everything Terraform refreshes, and change its code, settings,
-      # URL settings, public-access policy and tags.
+      # URL settings, invoke permissions and tags.
       {
         Effect = "Allow"
         Action = [
@@ -86,6 +86,29 @@ resource "aws_iam_role_policy" "deploy" {
           "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource",
         ]
         Resource = [local.log_group_arn, "${local.log_group_arn}:*"]
+      },
+      ], local.cloudfront_read_statements, [
+      # The CDN (infra/app/cdn.tf): change its settings, but not create or delete it, like the
+      # function. The distribution's id is made up by CloudFront, so it is matched by the
+      # Project tag that the app stack puts on everything.
+      {
+        Effect    = "Allow"
+        Action    = ["cloudfront:UpdateDistribution", "cloudfront:TagResource", "cloudfront:UntagResource"]
+        Resource  = "${local.cloudfront_arn}:distribution/*"
+        Condition = { StringEquals = { "aws:ResourceTag/Project" = var.name } }
+      },
+      {
+        Effect   = "Allow"
+        Action   = "cloudfront:UpdateOriginAccessControl"
+        Resource = "${local.cloudfront_arn}:origin-access-control/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudfront:UpdateFunction", "cloudfront:PublishFunction",
+          "cloudfront:TagResource", "cloudfront:UntagResource",
+        ]
+        Resource = local.cdn_function_arn
       },
     ], local.deny_statements)
   })

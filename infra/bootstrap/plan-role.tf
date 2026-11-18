@@ -46,8 +46,6 @@ resource "aws_iam_role_policy" "plan" {
       },
       # The one function: everything Terraform reads when it refreshes it.
       { Effect = "Allow", Action = ["lambda:Get*", "lambda:List*"], Resource = local.function_arn },
-      # The state bucket uses SSE-S3, so denying kms:Decrypt doesn't block state reads. Moving
-      # the bucket to a KMS key would.
       {
         Effect = "Deny"
         Action = [
@@ -64,6 +62,7 @@ resource "aws_iam_role_policy" "plan" {
         Resource  = "*"
         Condition = { StringNotEquals = { "kms:ViaService" = "lambda.${var.region}.amazonaws.com" } }
       },
-    ], local.deny_statements)
+      # The CDN (infra/app/cdn.tf) is read through local.cloudfront_read_statements.
+    ], local.cloudfront_read_statements, local.deny_statements)
   })
 }

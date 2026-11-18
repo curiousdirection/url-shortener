@@ -15,6 +15,36 @@ locals {
   app_state_arn    = "${local.state_arn}/app/terraform.tfstate"
   foundation_state = "${local.state_arn}/foundation/terraform.tfstate"
 
+  cloudfront_arn = "arn:aws:cloudfront::${local.account_id}"
+  # The CDN's function, made in infra/app/cdn.tf with this exact name.
+  cdn_function_arn = "${local.cloudfront_arn}:function/${var.name}-forwarded-host"
+
+  # What Terraform reads when it refreshes the CDN (infra/app/cdn.tf), for both roles. CloudFront
+  # makes up the ids of the distribution and the origin access control, so they can only be
+  # matched with `*`.
+  cloudfront_read_statements = [
+    {
+      Effect   = "Allow"
+      Action   = ["cloudfront:GetDistribution", "cloudfront:GetDistributionConfig"]
+      Resource = "${local.cloudfront_arn}:distribution/*"
+    },
+    {
+      Effect   = "Allow"
+      Action   = ["cloudfront:GetOriginAccessControl", "cloudfront:GetOriginAccessControlConfig"]
+      Resource = "${local.cloudfront_arn}:origin-access-control/*"
+    },
+    {
+      Effect   = "Allow"
+      Action   = ["cloudfront:DescribeFunction", "cloudfront:GetFunction"]
+      Resource = local.cdn_function_arn
+    },
+    {
+      Effect   = "Allow"
+      Action   = "cloudfront:ListTagsForResource"
+      Resource = ["${local.cloudfront_arn}:distribution/*", local.cdn_function_arn]
+    },
+  ]
+
   # Explicit denies for both roles: they hold even if an allow is widened by mistake.
   deny_statements = [
     {
