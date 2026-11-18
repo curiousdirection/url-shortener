@@ -2,6 +2,8 @@
 # Build the app zip and apply infra/app. For the first run and releases from your machine; CI
 # does the same on main. See "Deploy" in infra/README.md.
 # Usage: infra/scripts/release.sh   (needs AWS credentials, Node and the setup in that README)
+# The first run creates the CloudFront distribution, which takes about 5 to 15 minutes to deploy.
+# Terraform waits for it, so the apply looks stuck on the distribution; that is normal.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."

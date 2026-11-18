@@ -34,6 +34,12 @@ variable "package_hash" {
   type        = string
 }
 
+variable "origin_shield_region" {
+  description = "Turn on CloudFront Origin Shield in this region, an extra cache layer in front of the function (see \"Cost\" in infra/README.md). null turns it off. Use the nearest region that has it: for a function in eu-north-1 that is eu-west-2, per https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/origin-shield.html."
+  type        = string
+  default     = null
+}
+
 variable "memory_size" {
   description = "MB of memory for the function. Lambda gives CPU in proportion, so more memory is also faster."
   type        = number
