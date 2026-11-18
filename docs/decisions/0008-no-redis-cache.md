@@ -14,7 +14,7 @@ Don't add Redis, or any other cache, between the function and DynamoDB. CloudFro
 
 - **A second cache would rarely hit.** The function only sees CloudFront's cache misses: mostly links nobody has asked for recently. A popular link reaches DynamoDB about once per cache lifetime.
 - **DynamoDB is already fast enough.** Reads take single-digit milliseconds.
-- **It would undo what Lambda gained.** ElastiCache runs only inside a VPC, so the function would need one again, plus an always-on node that bills while idle.
+- **It would bring back a server we pay for all the time.** Lambda and DynamoDB only cost money when a request comes in. Redis on AWS (ElastiCache) is a server that runs day and night and is billed by the hour, even with no traffic. It can also only be reached from inside a private network (a VPC), so the function would have to move into one again.
 
 ## Consequences
 
