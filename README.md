@@ -59,16 +59,10 @@ What protects the app and its deployment, and what isn't covered yet: [`docs/sec
 Example:
 
 ```bash
-curl -X POST http://localhost:3000/api/urls \
+curl -X POST "$(terraform -chdir=infra/app output -raw url)/api/urls" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/some/very/long/path", "alias": "my-link"}'
 ```
-
-```json
-{"code":"my-link","shortUrl":"http://localhost:3000/my-link","longUrl":"https://example.com/some/very/long/path"}
-```
-
-Leave out `alias` to get a generated code. Then open `http://localhost:3000/my-link` (or `curl -i` it) to be redirected.
 
 ## Test
 
