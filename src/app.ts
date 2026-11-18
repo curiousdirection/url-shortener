@@ -30,12 +30,8 @@ const createSchema = z.object({
 // What a Host header can look like. Anything else is ignored.
 const HOST_PATTERN = /^[A-Za-z0-9.-]+(:\d{1,5})?$/;
 
-// The address the client called. Behind CloudFront the request's own host is the function URL's,
-// so a CloudFront Function on /api/* copies the viewer's Host into X-Forwarded-Host
-// (infra/app/functions/forwarded-host.js). Only CloudFront can call the function, so that header
-// can be trusted. Without it (local dev, tests) the request's own host is used.
-// Behind a proxy the request can arrive as plain http, and X-Forwarded-Proto says whether the
-// client used https. A Lambda function URL sets it.
+// The address the client called. X-Forwarded-Host is set by CloudFront (forwarded-host.js), the
+// only caller, so it's trusted; X-Forwarded-Proto by the function URL. Locally, neither is set.
 const requestOrigin = (c: Context) => {
   const { protocol, host } = new URL(c.req.url);
   const forwarded = c.req.header("x-forwarded-host");
