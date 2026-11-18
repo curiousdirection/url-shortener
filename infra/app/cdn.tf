@@ -1,10 +1,12 @@
 # CloudFront in front of the function. Why: docs/decisions/0007-cdn-cloudfront.md.
 
 locals {
-  # AWS managed policies (CI can't create policies), by their fixed IDs:
+  # CloudFront's cache rules. These are AWS's ready-made ones, by their fixed IDs, because CI
+  # isn't allowed to create its own:
   #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
-  # CachingOptimized keys on the path alone and follows the app's Cache-Control. Its minimum
-  # TTL is above 0, so it would cache even no-store: hence /health's own behaviour below.
+  # caching_optimized (redirects): keeps each path as long as the app's Cache-Control says, but
+  # always at least 1 second, even with no-store. That's why /health uses caching_disabled.
+  # caching_disabled (/api/* and /health): never caches.
   cache_policy_caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   cache_policy_caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
   # Forwards everything but Host: the function URL needs its own.
