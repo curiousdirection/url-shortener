@@ -150,7 +150,7 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
 - **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, and the function URL is free.
-- **Full scale, without a CDN:** about $15,500/month, 2.5 times the old ECS and RDS stack (about $6,200). Lambda's request fee alone is about $6,100 at about 30 billion requests a month. Data transfer out (about $2,650) is the same as before. The rest is Lambda run time and DynamoDB reads and writes.
+- **Full scale, without a CDN:** about $12,000/month, about twice the old ECS and RDS stack (about $6,200): Lambda requests ~$6,100 (about 30 billion a month), data transfer out ~$2,650, DynamoDB ~$2,300, Lambda run time ~$800.
 - **Full scale, behind a CDN** that answers most redirects from its cache, the origin costs about $1.2k/month, about the same as ECS and RDS did. That is why the design assumes a CDN ([ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md)).
 
 Set a budget alert in the AWS console.
