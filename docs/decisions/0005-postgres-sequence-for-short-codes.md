@@ -16,11 +16,6 @@ Take the number from a Postgres sequence (`nextval('url_code_seq')`) in the same
 - **Counter and links share fate.** They live in the same database and the same backups, so a restore puts both back to the same moment. A separate counter can be restored, reset or lost on its own.
 - **Load is not a reason for Redis.** At full scale creates average about 115/s. The `INSERT` that follows each `nextval` is the heavier part, and a separate counter wouldn't remove it.
 
-## Consequences
-
-- **Codes have gaps** (failed inserts, crashes). Nothing relies on them being gapless.
-- **Code generation is tied to Postgres.** Moving the links to another database means choosing a new scheme (see the alternatives).
-
 ## Alternatives considered
 
 - **Redis `INCR`** (the first version): see above.
