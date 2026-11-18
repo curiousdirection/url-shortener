@@ -7,7 +7,7 @@
     "dev": "dotenv -o -e .env -- tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "bundle": "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outfile=build/lambda/index.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "bundle": "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --minify --outfile=build/lambda/index.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "db:setup": "dotenv -o -e .env -- tsx src/setupDb.ts",
     "db:setup:test": "dotenv -o -e .env.test -- tsx src/setupDb.ts",
     "test": "vitest run"

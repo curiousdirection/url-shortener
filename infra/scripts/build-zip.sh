@@ -8,6 +8,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 rm -rf build
+# The bundle includes the AWS SDK on purpose (the pinned version, not the runtime's) and is minified.
 npm run bundle >&2
 # A fixed file time and no extra file attributes, so the same code always gives the same zip, and
 # so the same hash. Otherwise every release would look like a code change.
