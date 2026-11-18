@@ -82,7 +82,7 @@ Do these once, in order, on a commit that is on `main`.
 6. **Create the function from your machine**, because CI only updates a function that already exists.
 
    ```bash
-   infra/scripts/release.sh
+   infra/scripts/release.sh # yes
    curl $(terraform -chdir=infra/app output -raw url)/health   # {"status":"ok"}
    ```
 
