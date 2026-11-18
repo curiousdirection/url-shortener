@@ -120,7 +120,7 @@ Repeat step 4 (a user can hold two keys, so the old one works until you delete i
 
 A release replaces the running code at once, with no gradual rollout and no automatic rollback. The Deploy workflow checks `/health` afterwards and fails if it doesn't answer, but the bad version stays live until you replace it.
 
-To go back, run the Deploy workflow by hand with `ref` set to the commit to return to (a commit on `main` from after this change). It builds that commit and deploys it. Or revert the commit on `main`.
+To go back, run the Deploy workflow by hand with `ref` set to the commit to return to (a commit on `main` from after this change; it refuses any other). It builds that commit and deploys it. Or revert the commit on `main`.
 
 The table is not rolled back. Keep each change to what is stored compatible with the previous code.
 

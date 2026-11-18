@@ -47,6 +47,13 @@ jobs:
           ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }} # the commit CI tested, or the one to roll back to
           fetch-depth: 0 # to compare with the deployed commit
 
+      # A rollback may only deploy code that was merged, not a commit from another branch.
+      - name: Check the rollback commit is on main
+        if: inputs.ref != ''
+        run: |
+          git merge-base --is-ancestor HEAD origin/main ||
+            { echo "::error::$ROLLBACK_TO is not in main's history"; exit 1; }
+
       # The zip is built before signing in to AWS, so the npm packages never run with
       # credentials.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
