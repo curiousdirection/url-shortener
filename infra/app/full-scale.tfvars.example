@@ -3,7 +3,6 @@
 # ../foundation/full-scale.tfvars.example.
 memory_size = 512
 
-# Only warnings and errors (see the variable).
 system_log_level = "WARN"
 
 # Rate limits by IP (AWS WAF).
