@@ -9,8 +9,8 @@ locals {
   #
   # CachingOptimized: the cache key is the path alone (no query strings or cookies, and no
   # headers except a normalized Accept-Encoding), and the TTL follows the origin's Cache-Control
-  # between 1 second and 1 year. The app's max-age=86400 on a redirect and max-age=10 on a 404
-  # therefore apply as sent. A 404 is also an error response, which CloudFront caches for the
+  # between 1 second and 1 year. The app's s-maxage=86400 on a redirect (CloudFront prefers
+  # s-maxage to max-age) and max-age=10 on a 404 therefore apply as sent. A 404 is also an error response, which CloudFront caches for the
   # longer of the origin's max-age and its 10-second default, so 10 seconds holds either way.
   # It sets a minimum TTL above 0, so CloudFront caches even a response marked no-store: that is
   # why /health has its own behaviour below.

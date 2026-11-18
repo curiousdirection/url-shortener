@@ -111,7 +111,7 @@ A change to the distribution or its web ACL waits for CloudFront to deploy it ev
 
 **Rate limits:** off for practice, on at full scale (`rate_limiting` in `infra/app/variables.tf`). To try them, put `rate_limiting = true` in `infra/app/terraform.tfvars` and run `release.sh`; set it back afterwards. A client over a limit gets `429` for the rest of the 5 minutes. The limits are `rate_limit_all` (1,000 requests) and `rate_limit_create` (20 `POST`s to `/api/*`) in `infra/app/variables.tf`; change them in `terraform.tfvars` or the defaults. Rate-limit hits show in the web ACL's sampled requests in the AWS WAF console (region us-east-1).
 
-**Take down a link:** delete it from the table, then clear CloudFront's copy of the redirect (it keeps it for up to a day). Browsers may keep their own copy for as long, and an invalidation can't reach it.
+**Take down a link:** delete it from the table, then clear CloudFront's copy of the redirect (it keeps it for up to a day). Browsers don't keep a copy (`max-age=0`), so the invalidation is enough.
 
 ```bash
 aws cloudfront create-invalidation --distribution-id "$(terraform -chdir=infra/app output -raw distribution_id)" --paths "/<code>"

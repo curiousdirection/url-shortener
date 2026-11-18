@@ -29,7 +29,7 @@ How to run it is in [infra/README.md](../../infra/README.md).
 - **Full scale costs more per request.** CloudFront charges per request: about $36,500 a month for about 30 billion HTTPS requests in Europe, plus about $2,500 of data transfer ("Cost" in [infra/README.md](../../infra/README.md)). Cloudflare doesn't charge for cache hits, so it might be much cheaper, but that needs a quote.
 - **The 90% cache-hit figure in [0006](0006-move-to-lambda-and-dynamodb.md) is still a guess.** What settles it is how many different links get clicked per day.
 - **Creating a link needs a body hash.** The function URL needs a signed body, so a client sends `x-amz-content-sha256` (the body's SHA-256 in hex) with every `POST` ([README](../../README.md#api)).
-- **Redirects are cached for a day.** Taking down a link needs a cache invalidation, and browsers may keep the redirect as long.
+- **Redirects are cached for a day in CloudFront,** but not in browsers. Taking down a link needs a cache invalidation.
 - **Rate limiting is per IP,** so a flood spread across many IPs still gets through. CloudFront's built-in DDoS protection and the cache handle that.
 - **Practice doesn't exercise the rate limits.** Turn them on for a session to try them ("Deploy" in [infra/README.md](../../infra/README.md)).
 

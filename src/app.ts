@@ -43,9 +43,11 @@ const requestOrigin = (c: Context) => {
   return c.req.header("x-forwarded-proto") === "https" ? `https://${publicHost}` : `${protocol}//${publicHost}`;
 };
 
-// The CDN follows these (infra/app/cdn.tf). A redirect can be cached for a day, a 404 only for
-// 10 seconds so a link created just after a miss works soon. /health must never be cached.
-const CACHE_REDIRECT = "public, max-age=86400";
+// The CDN follows these (infra/app/cdn.tf). A redirect is cached by the CDN for a day (s-maxage)
+// but not by browsers (max-age=0), so a link taken down is gone once the CDN's copy is cleared.
+// A 404 is cached for only 10 seconds, so a link created just after a miss works soon. /health
+// must never be cached.
+const CACHE_REDIRECT = "public, max-age=0, s-maxage=86400";
 const CACHE_NOT_FOUND = "public, max-age=10";
 const CACHE_NONE = "no-store";
 
