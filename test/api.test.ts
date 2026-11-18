@@ -33,7 +33,7 @@ describe("POST /api/urls", () => {
     const redirect = await client.get(`/${body.code}`);
     expect(redirect.status).toBe(302);
     expect(redirect.headers.get("location")).toBe("https://example.com/a/very/long/path");
-    expect(redirect.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=86400");
+    expect(redirect.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=31536000");
   });
 
   it("supports a custom alias", async () => {
