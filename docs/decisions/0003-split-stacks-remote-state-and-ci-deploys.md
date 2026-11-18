@@ -1,6 +1,6 @@
 # 3. Split the Terraform stacks, keep state in S3 and deploy from CI
 
-Date: 2026-11-14. Status: accepted; amends [0002](0002-deploy-with-ecs-express-mode.md). The OIDC sign-in is superseded by [0004](0004-access-keys-instead-of-oidc.md).
+Date: 2026-11-14. Status: accepted; amends [0002](0002-deploy-with-ecs-express-mode.md). The OIDC sign-in is superseded by [0004](0004-access-keys-instead-of-oidc.md). The database password is superseded by [0006](0006-move-to-lambda-and-dynamodb.md).
 
 ## Context
 

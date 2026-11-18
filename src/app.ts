@@ -4,6 +4,9 @@ import { z } from "zod";
 import { AliasTakenError, type UrlService } from "./urlService.js";
 
 const RESERVED = new Set(["api", "health"]);
+// What a code can look like: the alias rules, or the generated 7 characters. Anything else is a
+// 404 without a database read (DynamoDB rejects keys over 2048 bytes).
+const CODE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 const createSchema = z.object({
   url: z
@@ -24,8 +27,8 @@ const createSchema = z.object({
     .optional(),
 });
 
-// The address the client called. Behind the load balancer the request arrives as plain http, and
-// X-Forwarded-Proto says whether the client used https.
+// The address the client called. Behind a proxy the request can arrive as plain http, and
+// X-Forwarded-Proto says whether the client used https. A Lambda function URL sets it.
 const requestOrigin = (c: Context) => {
   const { protocol, host } = new URL(c.req.url);
   return c.req.header("x-forwarded-proto") === "https" ? `https://${host}` : `${protocol}//${host}`;
@@ -48,7 +51,8 @@ export function buildApp(service: UrlService) {
   });
 
   app.get("/:code", async (c) => {
-    const longUrl = await service.resolve(c.req.param("code"));
+    const code = c.req.param("code");
+    const longUrl = CODE_PATTERN.test(code) ? await service.resolve(code) : null;
     if (!longUrl) return c.json({ error: "not found" }, 404);
     return c.redirect(longUrl, 302);
   });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { UrlService } from "../src/urlService.js";
 
-// No database needed: the service is a stub.
+// No table needed: the service is a stub.
 const service: UrlService = { create: async () => "abc123", resolve: async () => null };
 const create = (app: ReturnType<typeof buildApp>, url: string, headers: Record<string, string> = {}) =>
   app.request(url, {
@@ -17,7 +17,7 @@ describe("shortUrl", () => {
     expect((await res.json()).shortUrl).toBe("http://localhost:3000/abc123");
   });
 
-  it("uses https when the load balancer says the client did", async () => {
+  it("uses https when the proxy says the client did", async () => {
     const res = await create(buildApp(service), "http://app.example.com/api/urls", {
       "x-forwarded-proto": "https",
     });

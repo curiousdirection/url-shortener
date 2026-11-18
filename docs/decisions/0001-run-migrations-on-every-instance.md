@@ -1,6 +1,6 @@
 # 1. Run database migrations on every app instance at boot
 
-Date: 2026-11-12. Status: accepted; amended by [0002](0002-deploy-with-ecs-express-mode.md).
+Date: 2026-11-12. Status: superseded by [0006](0006-move-to-lambda-and-dynamodb.md). It was amended by [0002](0002-deploy-with-ecs-express-mode.md).
 
 ## Context
 

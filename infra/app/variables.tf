@@ -1,5 +1,5 @@
 # Inputs you can change. The defaults are the practice values. To override one, put it in
-# terraform.tfvars (gitignored) or pass `-var name=value`. The database settings are in
+# terraform.tfvars (gitignored) or pass `-var name=value`. The table settings are in
 # ../foundation/variables.tf. `state_bucket` has no default: you must set it (see below).
 
 variable "name" {
@@ -25,30 +25,17 @@ variable "state_bucket" {
 }
 
 variable "app_version" {
-  description = "Image tag to run (see scripts/image-tag.sh). No default, so pass -var app_version=... on every apply and destroy (any value works for destroy)."
+  description = "The release being deployed (scripts/app-version.sh: the first 7 characters of the commit). Shown in the function's description. No default, so pass -var app_version=... on every apply and destroy (any value works for destroy)."
   type        = string
 }
 
-variable "task_cpu" {
-  description = "CPU units per task: 256, 512, 1024, 2048 or 4096 (1024 = 1 vCPU). Must pair with a valid task_memory."
+variable "package_hash" {
+  description = "Base64 SHA-256 of build/app.zip, as printed by scripts/build-zip.sh. A new hash makes Terraform upload the zip. No default, so pass -var package_hash=... on every apply and destroy (any value works for destroy)."
+  type        = string
+}
+
+variable "memory_size" {
+  description = "MB of memory for the function. Lambda gives CPU in proportion, so more memory is also faster."
   type        = number
   default     = 256
-}
-
-variable "task_memory" {
-  description = "MiB per task. Fargate only allows certain CPU and memory pairs (256 with 512, 2048 with 4096, ...)."
-  type        = number
-  default     = 512
-}
-
-variable "min_tasks" {
-  description = "Fewest tasks to run."
-  type        = number
-  default     = 1
-}
-
-variable "max_tasks" {
-  description = "Most tasks autoscaling may run (it adds tasks above 60% average CPU)."
-  type        = number
-  default     = 2
 }

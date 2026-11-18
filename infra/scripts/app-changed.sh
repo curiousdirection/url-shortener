@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints "true" if the commits between <from> and <to> change anything that goes into the
-# image or the app stack, "false" if not (docs or tests alone). The deploy workflow compares
+# zip or the app stack, "false" if not (docs or tests alone). The deploy workflow compares
 # the deployed commit with the new one and deploys on "true".
 # Usage: infra/scripts/app-changed.sh <from commit> <to commit>
 set -euo pipefail
@@ -9,9 +9,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 # Folders end in "/"; everything else is an exact file.
 APP_PATHS=(
-  src/ migrations/ infra/app/ .github/actions/setup-terraform/
-  package.json package-lock.json tsconfig.json Dockerfile .dockerignore .node-version
-  .terraform-version infra/scripts/push-image.sh infra/scripts/image-tag.sh
+  src/ infra/app/ .github/actions/setup-terraform/
+  package.json package-lock.json tsconfig.json .node-version
+  .terraform-version infra/scripts/build-zip.sh infra/scripts/app-version.sh
   .github/workflows/deploy.yml .github/workflows/test.yml
 )
 

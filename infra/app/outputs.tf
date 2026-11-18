@@ -1,19 +1,21 @@
 # Values printed at the end of `terraform apply`. Show them again any time with
 # `terraform output` (or `terraform output -raw url` for just one, without quotes).
 
-# The public HTTPS address, e.g. https://xx.ecs.eu-north-1.on.aws. Express Mode makes it up
-# when it creates the service, so it is only known after the first apply.
+# The public HTTPS address, e.g. https://abc123.lambda-url.eu-north-1.on.aws. Lambda makes up
+# the id when it creates the URL, so it is only known after the first apply. The trailing slash
+# is dropped, so "$url/health" works.
 output "url" {
-  value = aws_ecs_express_gateway_service.app.ingress_paths[0].endpoint
+  value = trimsuffix(aws_lambda_function_url.app.function_url, "/")
 }
 
-# Where scripts/release.sh and the deploy workflow push the image.
-output "ecr_repository_url" {
-  value = aws_ecr_repository.app.repository_url
-}
-
-# The image tag that is deployed now. CI's plan reuses it, so that the plan only
-# shows real changes to the infrastructure and not a new image.
+# The release that is deployed now. The deploy workflow compares it with the new commit to
+# decide whether anything changed.
 output "app_version" {
   value = var.app_version
+}
+
+# The hash of the zip that is deployed now. CI's plan reuses it, so that the plan only shows
+# real changes to the infrastructure and not new code.
+output "package_hash" {
+  value = var.package_hash
 }

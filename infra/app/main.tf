@@ -1,16 +1,10 @@
-# The app: a container image in ECR, run by an ECS Express Mode service.
+# The app: one Lambda function (a zip of the bundled code), its function URL and its log group.
 #
-# The network, the database, the security groups, the two IAM roles and the database password
-# come from the foundation stack (see the data source below).
-#
-# Express Mode creates the rest: the ECS cluster ("default"), task definition, an
-# internet-facing load balancer with HTTPS and a certificate, target group, its own security
-# groups and CPU autoscaling.
-#   https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html
+# The table and the function's role come from the foundation stack (see the data source below).
 
 # What the foundation stack created, read from its state in S3. If this fails with "no
-# outputs", the foundation stack has not been applied yet: do that first (see "Deploy" in
-# ../README.md).
+# outputs", the foundation stack has not been applied yet: do that first (see "Set up and first
+# run" in ../README.md).
 #
 # The bucket is the one this stack's own state is in. It is passed in (state_bucket), not worked
 # out here, so there is one place that says which bucket it is (the TF_STATE_BUCKET variable in
@@ -28,82 +22,70 @@ locals {
   foundation = data.terraform_remote_state.foundation.outputs
 }
 
-resource "aws_ecr_repository" "app" {
-  name = var.name
-  # A tag, once pushed, always means the same image (release.sh tags with the git SHA).
-  image_tag_mutability = "IMMUTABLE"
-  # Otherwise terraform destroy fails while images are still in the repository.
-  force_delete = true
-}
-
-resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep the last 10 images (the ones you can roll back to)"
-      selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 10 }
-      action       = { type = "expire" }
-    }]
-  })
-}
-
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/${var.name}/app"
   retention_in_days = 7
 }
 
-resource "aws_ecs_express_gateway_service" "app" {
-  service_name            = var.name
-  execution_role_arn      = local.foundation.execution_role_arn
-  infrastructure_role_arn = local.foundation.infrastructure_role_arn
+resource "aws_lambda_function" "app" {
+  function_name = var.name
+  description   = "Release ${var.app_version}"
+  role          = local.foundation.lambda_role_arn
 
-  # Graviton (Arm): cheaper than x86. scripts/release.sh builds the image for linux/arm64.
-  cpu_architecture  = "ARM64"
-  cpu               = tostring(var.task_cpu)
-  memory            = tostring(var.task_memory)
-  health_check_path = "/health"
+  # Handler "index.handler" is `handler` exported from index.mjs, which infra/scripts/build-zip.sh
+  # builds from src/lambda.ts. The runtime is the newest Node.js one that is generally
+  # available; .node-version matches it (see ADR 0006).
+  runtime       = "nodejs24.x"
+  handler       = "index.handler"
+  architectures = ["arm64"] # Graviton: cheaper than x86
+  memory_size   = var.memory_size
+  timeout       = 10
 
-  # Make apply wait for the deployment, and fail if Express Mode rolls it back.
-  wait_for_steady_state = true
+  # build-zip.sh puts the zip here and prints its hash. Terraform is given the hash instead of
+  # reading the file, so a plan without the zip (CI's plan job) can reuse the current hash and
+  # show only real changes.
+  filename         = "${path.module}/../../build/app.zip"
+  source_code_hash = var.package_hash
 
-  network_configuration {
-    subnets         = local.foundation.public_subnet_ids
-    security_groups = [local.foundation.app_security_group_id]
-  }
-
-  scaling_target {
-    auto_scaling_metric = "AVERAGE_CPU"
-    # Express Mode's default, set explicitly: left out, the provider fails after creating
-    # the service ("produced an unexpected new value").
-    auto_scaling_target_value = 60
-    min_task_count            = var.min_tasks
-    max_task_count            = var.max_tasks
-  }
-
-  primary_container {
-    image          = "${aws_ecr_repository.app.repository_url}:${var.app_version}"
-    container_port = 3000 # the app's default PORT
-
-    aws_logs_configuration {
-      log_group = aws_cloudwatch_log_group.app.name
-      # The provider docs call this optional, but the AWS API rejects the service without it.
-      log_stream_prefix = "ecs"
-    }
-
-    # pg reads PGPASSWORD itself (see src/db.ts). verify-full checks the server certificate and
-    # its name against the RDS CA bundle in the image.
-    environment {
-      name  = "DATABASE_URL"
-      value = "postgres://${local.foundation.db_username}@${local.foundation.db_address}:5432/${local.foundation.db_name}?sslmode=verify-full"
-    }
-    secret {
-      name       = "PGPASSWORD"
-      value_from = local.foundation.db_password_parameter_arn
+  environment {
+    variables = {
+      TABLE_NAME = local.foundation.table_name
     }
   }
 
-  # No depends_on for the roles' policies or the DB rule: they are in the foundation stack,
-  # which is applied first and destroyed last (see "Tear down" in ../README.md). Destroying
-  # the foundation while this service exists would leave the service stuck in DRAINING.
+  # By default Lambda writes START, END and REPORT lines for every request. At full scale that is
+  # terabytes a month in CloudWatch (thousands of dollars), so only warnings and errors are kept.
+  # Log levels need the JSON format.
+  #   https://aws.amazon.com/blogs/compute/introducing-advanced-logging-controls-for-aws-lambda-functions/
+  logging_config {
+    log_format       = "JSON"
+    system_log_level = "WARN"
+    log_group        = aws_cloudwatch_log_group.app.name
+  }
+}
+
+# The public HTTPS address. Auth type NONE means anyone can call it; the CDN PR will switch it to
+# AWS_IAM, so that only the CDN can (see docs/security.md).
+resource "aws_lambda_function_url" "app" {
+  function_name      = aws_lambda_function.app.function_name
+  authorization_type = "NONE"
+}
+
+# With auth type NONE, the function's resource policy must still allow the call. Two statements
+# are needed since October 2025: one for the URL, one for the invoke through it.
+#   https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+resource "aws_lambda_permission" "url" {
+  statement_id           = "FunctionURLAllowPublicAccess"
+  function_name          = aws_lambda_function.app.function_name
+  action                 = "lambda:InvokeFunctionUrl"
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+resource "aws_lambda_permission" "invoke" {
+  statement_id             = "FunctionURLInvokeAllowPublicAccess"
+  function_name            = aws_lambda_function.app.function_name
+  action                   = "lambda:InvokeFunction"
+  principal                = "*"
+  invoked_via_function_url = true
 }

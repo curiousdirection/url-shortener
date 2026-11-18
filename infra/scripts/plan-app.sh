@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prints what applying the app stack would change, keeping the image that runs now so only
+# Prints what applying the app stack would change, keeping the release that runs now so only
 # infrastructure changes show. Read-only: runs with -lock=false. If the foundation isn't
 # applied (never, or torn down), says so and exits 0, since the app stack needs its outputs.
 # Usage: TF_STATE_BUCKET=<bucket> AWS_REGION=<region> infra/scripts/plan-app.sh
@@ -27,5 +27,15 @@ fi
 
 tf=(terraform -chdir=infra/app)
 "${tf[@]}" init -input=false -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="region=$AWS_REGION" >/dev/null
-current="$("${tf[@]}" output -json | jq -r '.app_version.value // "none"')"
-"${tf[@]}" plan -input=false -lock=false -no-color -var "app_version=$current"
+current="$("${tf[@]}" output -json)"
+version="$(jq -r '.app_version.value // "none"' <<<"$current")"
+hash="$(jq -r '.package_hash.value // "none"' <<<"$current")"
+
+# The plan reuses the deployed hash, so it never reads the zip. The provider still wants a file
+# at the path, so make a stand-in if there is none.
+if [ ! -e build/app.zip ]; then
+  mkdir -p build
+  echo stand-in > build/stand-in.txt
+  zip -q -X build/app.zip build/stand-in.txt
+fi
+"${tf[@]}" plan -input=false -lock=false -no-color -var "app_version=$version" -var "package_hash=$hash"

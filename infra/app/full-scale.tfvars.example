@@ -1,7 +1,4 @@
-# Full-scale task sizing for the load in "Assumptions" (root README.md). Reference only, not
-# meant to be applied; see "Cost" in ../README.md. The database sizes are in
+# Full-scale function settings for the load in "Assumptions" (root README.md). Reference only,
+# not meant to be applied; see "Cost" in ../README.md. The table settings are in
 # ../foundation/full-scale.tfvars.example.
-task_cpu    = 2048
-task_memory = 4096
-min_tasks   = 4
-max_tasks   = 12
+memory_size = 512

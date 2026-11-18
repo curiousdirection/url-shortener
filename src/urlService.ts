@@ -1,8 +1,12 @@
-import type { Pool } from "pg";
-import type { CodeGenerator } from "./codeGenerator.js";
+import {
+  ConditionalCheckFailedException,
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+} from "@aws-sdk/client-dynamodb";
+import { generateCode, type GenerateCode } from "./codeGenerator.js";
 
 const MAX_ATTEMPTS = 5;
-const UNIQUE_VIOLATION = "23505";
 
 export class AliasTakenError extends Error {}
 
@@ -11,40 +15,57 @@ export interface UrlService {
   resolve(code: string): Promise<string | null>;
 }
 
-const isUniqueViolation = (e: unknown) =>
-  typeof e === "object" && e !== null && (e as { code?: string }).code === UNIQUE_VIOLATION;
+export function createUrlService(
+  db: DynamoDBClient,
+  tableName: string,
+  newCode: GenerateCode = generateCode,
+): UrlService {
+  // Writes the link only if the code is free. Returns false if it is taken.
+  const putIfFree = async (code: string, longUrl: string) => {
+    try {
+      await db.send(
+        new PutItemCommand({
+          TableName: tableName,
+          Item: { code: { S: code }, long_url: { S: longUrl } },
+          ConditionExpression: "attribute_not_exists(code)",
+        }),
+      );
+      return true;
+    } catch (e) {
+      if (e instanceof ConditionalCheckFailedException) return false;
+      throw e;
+    }
+  };
 
-export function createUrlService(pool: Pool, codes: CodeGenerator): UrlService {
-  const insert = (code: string, longUrl: string) =>
-    pool.query("INSERT INTO urls (code, long_url) VALUES ($1, $2)", [code, longUrl]);
+  const get = async (code: string, consistent: boolean) => {
+    const { Item } = await db.send(
+      new GetItemCommand({
+        TableName: tableName,
+        Key: { code: { S: code } },
+        ConsistentRead: consistent,
+      }),
+    );
+    return Item?.long_url?.S ?? null;
+  };
 
   return {
     async create(longUrl, alias) {
       if (alias) {
-        try {
-          await insert(alias, longUrl);
-          return alias;
-        } catch (e) {
-          if (isUniqueViolation(e)) throw new AliasTakenError(alias);
-          throw e;
-        }
+        if (await putIfFree(alias, longUrl)) return alias;
+        throw new AliasTakenError(alias);
       }
-      // A generated code can collide with an existing custom alias; take the next one.
+      // A random code can match an existing code or alias; draw another.
       for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const code = await codes.next();
-        try {
-          await insert(code, longUrl);
-          return code;
-        } catch (e) {
-          if (!isUniqueViolation(e)) throw e;
-        }
+        const code = newCode();
+        if (await putIfFree(code, longUrl)) return code;
       }
       throw new Error("could not allocate a unique code");
     },
 
+    // The default read is cheaper but can miss an item written a moment ago. Ask again with a
+    // consistent read, so a link that was just created never answers 404.
     async resolve(code) {
-      const { rows } = await pool.query("SELECT long_url FROM urls WHERE code = $1", [code]);
-      return rows[0]?.long_url ?? null;
+      return (await get(code, false)) ?? (await get(code, true));
     },
   };
 }

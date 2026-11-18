@@ -1,6 +1,6 @@
 # Inputs you can change. The defaults are the practice values. To override one, put it in
-# terraform.tfvars (gitignored) or pass `-var name=value`. The app's own settings (image
-# version, task size, number of tasks) are in ../app/variables.tf.
+# terraform.tfvars (gitignored) or pass `-var name=value`. The function's own settings (memory)
+# are in ../app/variables.tf.
 
 variable "name" {
   description = "Prefix for resource names and tags."
@@ -14,52 +14,16 @@ variable "region" {
   default     = "eu-north-1"
 }
 
-# Database
+# Table
 
-variable "db_instance_class" {
-  description = "RDS machine size. db.t4g.micro is covered by the AWS free plan."
-  type        = string
-  default     = "db.t4g.micro"
-}
-
-variable "db_allocated_storage" {
-  description = "GiB."
-  type        = number
-  default     = 20
-}
-
-variable "db_multi_az" {
-  description = "Keep a standby copy of the database in a second availability zone for failover. Roughly doubles the cost; not allowed on the free plan."
+variable "table_point_in_time_recovery" {
+  description = "Keep continuous backups, so the table can be restored to any second in the last 35 days. Costs a little per GB stored."
   type        = bool
   default     = false
 }
 
-variable "db_backup_retention_days" {
-  description = "Days of automatic backups to keep."
-  type        = number
-  default     = 1
-}
-
-variable "db_deletion_protection" {
-  description = "If true, AWS refuses to delete the database (including terraform destroy) until it is turned off."
+variable "table_deletion_protection" {
+  description = "If true, AWS refuses to delete the table (including terraform destroy) until it is turned off."
   type        = bool
   default     = false
-}
-
-variable "db_apply_immediately" {
-  description = "If true, database changes (such as a new instance class, which restarts it) are applied straight away. If false, they wait for the weekly maintenance window."
-  type        = bool
-  default     = true
-}
-
-variable "db_password_version" {
-  description = "Raise by one to set a new database password (see \"Rotate the database password\" in infra/README.md)."
-  type        = number
-  default     = 1
-}
-
-variable "db_skip_final_snapshot" {
-  description = "If true, no backup is taken when the database is deleted. If false, a final snapshot named <name>-final-<random> is kept and keeps costing money."
-  type        = bool
-  default     = true
 }

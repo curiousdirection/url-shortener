@@ -1,7 +1,7 @@
-# The foundation stack: network, database, ECS roles, password. See docs/decisions/0003.
+# The foundation stack: the DynamoDB table and the Lambda function's role. See
+# docs/decisions/0003 and 0006.
 
 terraform {
-  # Write-only arguments (the database password) need 1.11.
   required_version = ">= 1.11"
 
   # State in the bucket from ../bootstrap; pass the bucket and region with
@@ -13,18 +13,12 @@ terraform {
     encrypt      = true
   }
 
-  # Plugins ("providers") Terraform downloads on `terraform init`. `~> 6.0` means any 6.x
-  # version, but not 7.0. The exact versions used are pinned in .terraform.lock.hcl.
+  # The plugin ("provider") Terraform downloads on `terraform init`. `~> 6.0` means any 6.x
+  # version, but not 7.0. The exact version used is pinned in .terraform.lock.hcl.
   required_providers {
-    # Creates the AWS resources.
     aws = {
       source  = "hashicorp/aws"
       version = "~> 6.0"
-    }
-    # Generates the random database password (ephemeral needs 3.7).
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.7"
     }
   }
 }
