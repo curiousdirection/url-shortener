@@ -118,11 +118,12 @@ Repeat step 4 (a user can hold two keys, so the old one works until you delete i
 
 ## Rollback
 
-A release replaces the running code at once, with no gradual rollout and no automatic rollback. The Deploy workflow checks `/health` afterwards and fails if it doesn't answer, but the bad version stays live until you replace it.
+A deploy switches all traffic to the new code at once. If the new code is broken, the Deploy run fails its `/health` check, but the broken code keeps running until you roll back. Either:
 
-To go back, run the Deploy workflow by hand with `ref` set to the commit to return to (a commit on `main` from after this change; it refuses any other). It builds that commit and deploys it. Or revert the commit on `main`.
+- **Revert the bad commit on `main`.** CI tests and deploys the revert like any other change.
+- **Redeploy an earlier commit.** Run the Deploy workflow by hand and set `ref` to that commit. It must be on `main` and from after the move to Lambda; the workflow refuses commits from other branches.
 
-The table is not rolled back. Keep each change to what is stored compatible with the previous code.
+A rollback changes the code, not the links in the table. So a change to how links are stored must still work with the previous code.
 
 ## Tear down
 
