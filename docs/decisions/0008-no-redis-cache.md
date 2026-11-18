@@ -8,13 +8,14 @@ A cache in front of the database is the usual way to make redirects fast and che
 
 ## Decision
 
-Don't add Redis, or any other cache, between the function and DynamoDB. CloudFront is the only cache.
+Don't add Redis, or any other cache, between our Lambda function and DynamoDB. CloudFront is the only cache.
 
 ## Why
 
-- **A second cache would rarely hit.** The function only sees CloudFront's cache misses: mostly links nobody has asked for recently. A popular link reaches DynamoDB about once per cache lifetime.
+- **A second cache would rarely hit.** Our Lambda function only sees CloudFront's cache misses: mostly links nobody has asked for recently. A popular link reaches DynamoDB about once per cache lifetime.
 - **DynamoDB is already fast enough.** Reads take single-digit milliseconds.
-- **It would bring back a server we pay for all the time.** Lambda and DynamoDB only cost money when a request comes in. Redis on AWS (ElastiCache) is a server that runs day and night and is billed by the hour, even with no traffic. It can also only be reached from inside a private network (a VPC), so our app, the Lambda function, would have to run inside that network to use it.
+- **It costs money while idle.**
+- **It would also need the private network (VPC) that [0006](0006-move-to-lambda-and-dynamodb.md) removed.**
 
 ## Consequences
 
@@ -24,6 +25,7 @@ Don't add Redis, or any other cache, between the function and DynamoDB. CloudFro
 
 - **ElastiCache (Redis or Valkey):** see above.
 - **DAX**, DynamoDB's own cache: also runs inside a VPC, with always-on nodes.
+- **A cache over HTTPS** (Upstash, Momento): no VPC or idle cost, but another vendor and an API key, and it would rarely hit behind CloudFront.
 - **An in-process cache in the function:** Lambda copies are short-lived and mostly see links that aren't cached anywhere yet.
 
 ## Revisit when
