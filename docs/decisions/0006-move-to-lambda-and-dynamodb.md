@@ -8,7 +8,7 @@ Date: 2026-11-18. Status: accepted; supersedes [0001](0001-run-migrations-on-eve
 
 The app ran on ECS Express Mode with RDS Postgres ([0002](0002-deploy-with-ecs-express-mode.md)). The practice deployment cost about $50 a month, and the stack needed a VPC, a database password and migrations. The app does one lookup by key per redirect and one write per new link.
 
-Neither stack absorbs a sudden 100× spike on its own: new Fargate tasks and the load balancer take minutes to scale. So both need a CDN, and they're compared behind one.
+Neither stack absorbs a sudden 100× spike on its own. New Fargate tasks and the load balancer take minutes to scale. Lambda adds at most 1,000 copies every 10 seconds, the account caps how many run at once, and DynamoDB limits how fast one key can be read. So both need a CDN, and they're compared behind one.
 
 ## Decision
 
@@ -31,7 +31,6 @@ How to run it is in [infra/README.md](../../infra/README.md).
 
 - **Without a CDN, full scale costs about twice the old stack,** because Lambda charges per request ("Cost" in [infra/README.md](../../infra/README.md)). Until the CDN is added, only the practice deployment makes sense.
 - **The CDN must be able to call the function by its AWS hostname.** CloudFront can. Cloudflare below Enterprise can't, and would need API Gateway, about $3k a month more at full scale.
-- **Without a CDN, spikes aren't absorbed.** DynamoDB limits reads of a single key, and Lambda adds at most 1,000 instances every 10 seconds.
 - **Codes rarely collide.** A taken code means the create draws again; five in a row fails it. At 1 billion links (codes drawn uniformly, each draw independent):
 
   ```
