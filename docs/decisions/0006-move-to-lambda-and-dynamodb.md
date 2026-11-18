@@ -49,4 +49,4 @@ How to run it is in [infra/README.md](../../infra/README.md).
 
 ## Revisit when
 
-The CDN is chosen, or the real cache hit rate is known.
+The CDN is chosen, or the real cache hit rate is known. If creates start retrying often, raise the code length (`CODE_LENGTH` in `src/codeGenerator.ts`); existing codes keep working, because lookups match the exact code.
