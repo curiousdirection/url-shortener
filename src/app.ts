@@ -27,17 +27,35 @@ const createSchema = z.object({
     .optional(),
 });
 
-// The address the client called. Behind a proxy the request can arrive as plain http, and
-// X-Forwarded-Proto says whether the client used https. A Lambda function URL sets it.
+// What a Host header can look like. Anything else is ignored.
+const HOST_PATTERN = /^[A-Za-z0-9.-]+(:\d{1,5})?$/;
+
+// The address the client called. Behind CloudFront the request's own host is the function URL's,
+// so a CloudFront Function on /api/* copies the viewer's Host into X-Forwarded-Host
+// (infra/app/functions/forwarded-host.js). Only CloudFront can call the function, so that header
+// can be trusted. Without it (local dev, tests) the request's own host is used.
+// Behind a proxy the request can arrive as plain http, and X-Forwarded-Proto says whether the
+// client used https. A Lambda function URL sets it.
 const requestOrigin = (c: Context) => {
   const { protocol, host } = new URL(c.req.url);
-  return c.req.header("x-forwarded-proto") === "https" ? `https://${host}` : `${protocol}//${host}`;
+  const forwarded = c.req.header("x-forwarded-host");
+  const publicHost = forwarded && HOST_PATTERN.test(forwarded) ? forwarded : host;
+  return c.req.header("x-forwarded-proto") === "https" ? `https://${publicHost}` : `${protocol}//${publicHost}`;
 };
+
+// The CDN follows these (infra/app/cdn.tf). A redirect can be cached for a day, a 404 only for
+// 10 seconds so a link created just after a miss works soon. /health must never be cached.
+const CACHE_REDIRECT = "public, max-age=86400";
+const CACHE_NOT_FOUND = "public, max-age=10";
+const CACHE_NONE = "no-store";
 
 export function buildApp(service: UrlService) {
   const app = new Hono();
 
-  app.get("/health", (c) => c.json({ status: "ok" }));
+  app.get("/health", (c) => {
+    c.header("Cache-Control", CACHE_NONE);
+    return c.json({ status: "ok" });
+  });
 
   app.post("/api/urls", zValidator("json", createSchema), async (c) => {
     const { url, alias } = c.req.valid("json");
@@ -53,7 +71,11 @@ export function buildApp(service: UrlService) {
   app.get("/:code", async (c) => {
     const code = c.req.param("code");
     const longUrl = CODE_PATTERN.test(code) ? await service.resolve(code) : null;
-    if (!longUrl) return c.json({ error: "not found" }, 404);
+    if (!longUrl) {
+      c.header("Cache-Control", CACHE_NOT_FOUND);
+      return c.json({ error: "not found" }, 404);
+    }
+    c.header("Cache-Control", CACHE_REDIRECT);
     return c.redirect(longUrl, 302);
   });
 

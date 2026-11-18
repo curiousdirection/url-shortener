@@ -33,6 +33,7 @@ describe("POST /api/urls", () => {
     const redirect = await client.get(`/${body.code}`);
     expect(redirect.status).toBe(302);
     expect(redirect.headers.get("location")).toBe("https://example.com/a/very/long/path");
+    expect(redirect.headers.get("cache-control")).toBe("public, max-age=86400");
   });
 
   it("supports a custom alias", async () => {
@@ -81,7 +82,9 @@ describe("POST /api/urls", () => {
 
 describe("GET /:code", () => {
   it("returns 404 for unknown codes", async () => {
-    expect((await client.get("/nope123")).status).toBe(404);
+    const res = await client.get("/nope123");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=10");
   });
 
   it("returns 404 for a code that could never exist", async () => {
@@ -91,6 +94,8 @@ describe("GET /:code", () => {
 
 describe("GET /health", () => {
   it("is ok", async () => {
-    expect((await client.get("/health")).status).toBe(200);
+    const res = await client.get("/health");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });
