@@ -36,7 +36,7 @@ provider "aws" {
   }
 }
 
-# For the resource that only exists in us-east-1: the web ACL (waf.tf).
+# The web ACL must be in us-east-1 (waf.tf).
 provider "aws" {
   alias  = "us_east_1"
   region = "us-east-1"

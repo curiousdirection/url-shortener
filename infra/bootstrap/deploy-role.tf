@@ -88,9 +88,8 @@ resource "aws_iam_role_policy" "deploy" {
         Resource = [local.log_group_arn, "${local.log_group_arn}:*"]
       },
       ], local.cloudfront_read_statements, [
-      # The CDN (infra/app/cdn.tf): change its settings, but not create or delete it, like the
-      # function. The distribution's id is made up by CloudFront, so it is matched by the
-      # Project tag that the app stack puts on everything.
+      # The CDN: update, not create or delete. CloudFront picks the distribution's id, so it is
+      # matched by the Project tag the app stack sets.
       {
         Effect    = "Allow"
         Action    = ["cloudfront:UpdateDistribution", "cloudfront:TagResource", "cloudfront:UntagResource"]
@@ -110,7 +109,7 @@ resource "aws_iam_role_policy" "deploy" {
         ]
         Resource = local.cdn_function_arn
       },
-      # The web ACL: change its rules, not create or delete it.
+      # The web ACL: update, not create or delete.
       {
         Effect   = "Allow"
         Action   = ["wafv2:UpdateWebACL", "wafv2:TagResource", "wafv2:UntagResource"]

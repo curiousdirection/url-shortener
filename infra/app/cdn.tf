@@ -1,32 +1,20 @@
-# The CloudFront distribution in front of the function. Why: docs/decisions/0007-cdn-cloudfront.md.
-# The public address is its *.cloudfront.net name (no custom domain).
+# CloudFront in front of the function. Why: docs/decisions/0007-cdn-cloudfront.md.
 
 locals {
-  # AWS managed policies, by their fixed IDs:
+  # AWS managed policies (CI can't create policies), by their fixed IDs:
   #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
-  #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-origin-request-policies.html
-  # Only managed policies, because CI can't create policies.
-  #
-  # CachingOptimized: the cache key is the path alone (no query strings or cookies, and no
-  # headers except a normalized Accept-Encoding), and the TTL follows the origin's Cache-Control
-  # between 1 second and 1 year. The app's s-maxage=86400 on a redirect (CloudFront prefers
-  # s-maxage to max-age) and max-age=10 on a 404 therefore apply as sent. A 404 is also an error response, which CloudFront caches for the
-  # longer of the origin's max-age and its 10-second default, so 10 seconds holds either way.
-  # It sets a minimum TTL above 0, so CloudFront caches even a response marked no-store: that is
-  # why /health has its own behaviour below.
+  # CachingOptimized keys on the path alone and follows the app's Cache-Control. Its minimum
+  # TTL is above 0, so it would cache even no-store: hence /health's own behaviour below.
   cache_policy_caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   cache_policy_caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-  # AllViewerExceptHostHeader: forwards everything the viewer sent except Host. CloudFront then
-  # sets Host to the function URL's, which the function URL needs. The default and /health
-  # behaviours have no origin request policy, and CloudFront sets that Host for them too.
+  # Forwards everything but Host: the function URL needs its own.
   origin_request_policy_all_viewer_except_host = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
 
-  # "https://abc123.lambda-url.eu-north-1.on.aws/" without the scheme and the slash.
   function_url_host = trimsuffix(trimprefix(aws_lambda_function_url.app.function_url, "https://"), "/")
   origin_id         = "function-url"
 }
 
-# CloudFront signs every request to the function URL with this (SigV4, service "lambda").
+# Signs every request to the function URL, so only CloudFront can call it.
 resource "aws_cloudfront_origin_access_control" "app" {
   name                              = var.name
   description                       = "Signs requests to the ${var.name} function URL"
@@ -62,9 +50,7 @@ resource "aws_cloudfront_distribution" "app" {
       origin_ssl_protocols   = ["TLSv1.2"]
     }
 
-    # One more cache layer between CloudFront's regional caches and the function, so each link is
-    # fetched from the function about once, not once per region. Charged per request, so off for
-    # practice.
+    # An extra cache layer, so each link reaches the function about once. Off for practice.
     dynamic "origin_shield" {
       for_each = var.origin_shield_region == null ? [] : [var.origin_shield_region]
       content {
@@ -74,7 +60,7 @@ resource "aws_cloudfront_distribution" "app" {
     }
   }
 
-  # GET /:code, the redirect. Cached by the origin's Cache-Control (see the policy above).
+  # Redirects, cached as the app's Cache-Control says.
   default_cache_behavior {
     target_origin_id       = local.origin_id
     viewer_protocol_policy = "redirect-to-https"
@@ -84,7 +70,7 @@ resource "aws_cloudfront_distribution" "app" {
     cache_policy_id        = local.cache_policy_caching_optimized
   }
 
-  # The API, never cached. https-only: a POST must not be redirected, which can drop its body.
+  # The API, never cached. https-only, because a redirected POST can lose its body.
   ordered_cache_behavior {
     path_pattern             = "/api/*"
     target_origin_id         = local.origin_id
@@ -94,15 +80,14 @@ resource "aws_cloudfront_distribution" "app" {
     cache_policy_id          = local.cache_policy_caching_disabled
     origin_request_policy_id = local.origin_request_policy_all_viewer_except_host
 
-    # The app builds shortUrl from the viewer's host (see requestOrigin in src/app.ts).
+    # For shortUrl (src/app.ts).
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.forwarded_host.arn
     }
   }
 
-  # The deploy check and uptime probes: must reach the function every time. The app also sends
-  # no-store, but the default behaviour's cache policy would cache it anyway.
+  # Never cached, so health checks reach the function.
   ordered_cache_behavior {
     path_pattern           = "/health"
     target_origin_id       = local.origin_id
@@ -118,7 +103,6 @@ resource "aws_cloudfront_distribution" "app" {
     }
   }
 
-  # The default *.cloudfront.net certificate: no custom domain, no ACM certificate.
   viewer_certificate {
     cloudfront_default_certificate = true
   }

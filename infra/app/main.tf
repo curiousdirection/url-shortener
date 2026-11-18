@@ -1,5 +1,5 @@
 # The app: one Lambda function (a zip of the bundled code), its function URL and its log group.
-# The CloudFront distribution in front of it is in cdn.tf.
+# CloudFront in front of it: cdn.tf.
 #
 # The table and the function's role come from the foundation stack (see the data source below).
 
@@ -65,16 +65,13 @@ resource "aws_lambda_function" "app" {
   }
 }
 
-# The function's own HTTPS address. Auth type AWS_IAM means a call must be signed, so only
-# CloudFront can make one (cdn.tf signs its requests); see docs/security.md.
+# The function's own address. AWS_IAM: only signed calls, so only CloudFront (cdn.tf).
 resource "aws_lambda_function_url" "app" {
   function_name      = aws_lambda_function.app.function_name
   authorization_type = "AWS_IAM"
 }
 
-# With auth type AWS_IAM, the function's resource policy must allow CloudFront, and only this
-# distribution. Two statements are needed since October 2025: one for the URL, one for the
-# invoke through it.
+# Allow this distribution only: one statement for the URL, one for the invoke through it.
 #   https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
 #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-lambda.html
 resource "aws_lambda_permission" "url" {

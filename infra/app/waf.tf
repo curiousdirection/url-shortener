@@ -1,8 +1,6 @@
-# Rate limiting by client IP. Why: docs/decisions/0007-cdn-cloudfront.md. Only made when
-# rate_limiting is true (full scale): WAF bills about $7 a month even when idle.
+# Rate limits by IP, only when rate_limiting is true. Why: docs/decisions/0007-cdn-cloudfront.md.
 
-# A web ACL for CloudFront must be in us-east-1, whatever region the rest of the stack uses.
-# That region is allowed on this account (docs/security.md).
+# A web ACL for CloudFront must be in us-east-1.
 resource "aws_wafv2_web_acl" "app" {
   count       = var.rate_limiting ? 1 : 0
   provider    = aws.us_east_1
@@ -21,7 +19,7 @@ resource "aws_wafv2_web_acl" "app" {
     content_type = "APPLICATION_JSON"
   }
 
-  # Every request. Requests that CloudFront answers from its cache are counted too.
+  # Every request, cached or not.
   rule {
     name     = "rate-limit-all"
     priority = 1

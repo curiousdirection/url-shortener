@@ -35,13 +35,13 @@ variable "package_hash" {
 }
 
 variable "origin_shield_region" {
-  description = "Turn on CloudFront Origin Shield in this region, an extra cache layer in front of the function (see \"Cost\" in infra/README.md). null turns it off. Use the nearest region that has it: for a function in eu-north-1 that is eu-west-2, per https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/origin-shield.html."
+  description = "Region for CloudFront Origin Shield, an extra cache layer; null turns it off. For eu-north-1, AWS pairs eu-west-2."
   type        = string
   default     = null
 }
 
 variable "rate_limit_all" {
-  description = "Requests of any kind that one IP address may send in 5 minutes before the web ACL answers 429. At least 10 (the WAF minimum)."
+  description = "Requests one IP may send in 5 minutes before getting 429. At least 10."
   type        = number
   default     = 1000
 
@@ -52,7 +52,7 @@ variable "rate_limit_all" {
 }
 
 variable "rate_limit_create" {
-  description = "POST requests to /api/* (creating links) that one IP address may send in 5 minutes before the web ACL answers 429. At least 10 (the WAF minimum)."
+  description = "Links one IP may create in 5 minutes before getting 429. At least 10."
   type        = number
   default     = 20
 
@@ -63,7 +63,7 @@ variable "rate_limit_create" {
 }
 
 variable "rate_limiting" {
-  description = "Put the AWS WAF rate limits on the distribution. Off for practice, because WAF costs about $7 a month even when idle; on at full scale (see \"Cost\" in infra/README.md)."
+  description = "Rate limits (AWS WAF). Off for practice: WAF costs about $7 a month even when idle."
   type        = bool
   default     = false
 }

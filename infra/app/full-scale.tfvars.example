@@ -3,8 +3,8 @@
 # ../foundation/full-scale.tfvars.example.
 memory_size = 512
 
-# Rate limits by IP (AWS WAF). Off for practice, where WAF would cost about $7 a month.
+# Rate limits by IP (AWS WAF).
 rate_limiting = true
 
-# Origin Shield in the region AWS pairs with eu-north-1 (see the variable's description).
+# Origin Shield (see the variable).
 origin_shield_region = "eu-west-2"

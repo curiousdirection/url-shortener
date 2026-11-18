@@ -1,6 +1,5 @@
-// CloudFront Function (viewer request, JavaScript runtime 2.0) for /api/*. It copies the host the
-// viewer called into X-Forwarded-Host, because the origin request carries the function URL's host
-// instead. It always overwrites the header, so a viewer can't set it. Read by src/app.ts.
+// Runs on /api/*. Copies the viewer's Host into X-Forwarded-Host for src/app.ts, since the function
+// gets its own host instead. Always overwrites the header, so a viewer can't fake it.
 function handler(event) {
   var request = event.request;
   if (request.headers.host) {

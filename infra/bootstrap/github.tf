@@ -21,9 +21,7 @@ locals {
 
   cdn_web_acl_arn = "arn:aws:wafv2:us-east-1:${local.account_id}:global/webacl/${var.name}/*"
 
-  # What Terraform reads when it refreshes the CDN (infra/app/cdn.tf), for both roles. CloudFront
-  # makes up the ids of the distribution and the origin access control, so they can only be
-  # matched with `*`.
+  # What Terraform reads to refresh the CDN, for both roles. CloudFront picks the ids, hence `*`.
   cloudfront_read_statements = [
     {
       Effect   = "Allow"
@@ -45,8 +43,7 @@ locals {
       Action   = "cloudfront:ListTagsForResource"
       Resource = ["${local.cloudfront_arn}:distribution/*", local.cdn_function_arn]
     },
-    # The web ACL (infra/app/waf.tf): a CloudFront one is always in us-east-1. WAF adds an id
-    # after the name, so the name is matched with `*` after it.
+    # The web ACL, in us-east-1. WAF adds an id after the name, hence `*`.
     {
       Effect   = "Allow"
       Action   = ["wafv2:GetWebACL", "wafv2:ListTagsForResource"]
