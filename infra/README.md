@@ -124,6 +124,16 @@ terraform -chdir=infra/foundation plan
 terraform -chdir=infra/foundation apply
 ```
 
+## Logs
+
+The function logs to the CloudWatch log group `/url-shortener/app` (region eu-north-1). For practice, Lambda writes a REPORT line with timings for every request; at full scale only warnings and errors are kept (`system_log_level`). To list the timings, run this in CloudWatch Logs Insights on that log group (`init_ms` is only set on a cold start):
+
+```
+fields @timestamp, record.metrics.initDurationMs as init_ms, record.metrics.durationMs as duration_ms
+| filter type = "platform.report"
+| sort @timestamp desc
+```
+
 ## Rotate the CI access keys
 
 Repeat step 4 (a user can hold two keys, so the old one works until you delete it), then delete the old key: `aws iam delete-access-key --user-name <user> --access-key-id <old key id>`, with the id from `aws iam list-access-keys --user-name <user>`.
