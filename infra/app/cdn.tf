@@ -19,8 +19,8 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"
 }
 
-# For /api/*: passes on everything the visitor sent except Host, which the function URL needs
-# to be its own.
+# For /api/*: passes the visitor's headers on to the function, except Host. The function URL
+# only answers requests addressed to its own name, so CloudFront puts that in instead.
 data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
