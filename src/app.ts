@@ -34,9 +34,9 @@ const requestOrigin = (c: Context) => {
   return forwarded ? `${url.protocol}//${forwarded}` : url.origin;
 };
 
-// CloudFront caches a redirect for a day, browsers don't (so a takedown needs only an
+// CloudFront caches a redirect for a year, browsers don't (so a takedown needs only an
 // invalidation), and a 404 for 10 seconds, so a new link works soon.
-const CACHE_REDIRECT = "public, max-age=0, s-maxage=86400";
+const CACHE_REDIRECT = "public, max-age=0, s-maxage=31536000";
 const CACHE_NOT_FOUND = "public, max-age=10";
 const CACHE_NONE = "no-store";
 

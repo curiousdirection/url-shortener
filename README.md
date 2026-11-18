@@ -55,7 +55,7 @@ What protects the app and its deployment, and what isn't covered yet: [`docs/sec
 ## API
 
 - `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `shortUrl` uses the address the request was sent to. `400` on invalid input, `409` if the alias is taken. On AWS the request must carry `x-amz-content-sha256`, the hex SHA-256 of the body (the function URL can't accept an unsigned body).
-- `GET /:code` redirects (302) to the original URL, or `404`. CloudFront keeps a redirect for a day.
+- `GET /:code` redirects (302) to the original URL, or `404`.
 - `GET /health`
 - `429` from any route: one IP sent too many requests in 5 minutes (at full scale; [limits](infra/README.md#deploy)).
 
