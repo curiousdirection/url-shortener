@@ -8,6 +8,8 @@ Date: 2026-11-18. Status: accepted; supersedes [0001](0001-run-migrations-on-eve
 
 The app ran on ECS Express Mode with RDS Postgres ([0002](0002-deploy-with-ecs-express-mode.md)). The practice deployment cost about $50 a month, and the stack needed a VPC, a database password and migrations. The app does one lookup by key per redirect and one write per new link.
 
+Neither stack absorbs a sudden 100× spike on its own. New Fargate tasks and the load balancer take minutes to scale. Lambda adds at most 1,000 copies every 10 seconds, the account caps how many run at once, and DynamoDB limits how fast one key can be read. So both need a CDN, and they're compared behind one.
+
 ## Decision
 
 - **A Lambda function with a function URL** (a zip, on Arm). Hono's `hono/aws-lambda` adapter handles the Lambda events. The function URL is the public address for now.
@@ -29,7 +31,6 @@ How to run it is in [infra/README.md](../../infra/README.md).
 
 - **Without a CDN, full scale costs about twice the old stack,** because Lambda charges per request ("Cost" in [infra/README.md](../../infra/README.md)). Until the CDN is added, only the practice deployment makes sense.
 - **The CDN must be able to call the function by its AWS hostname.** CloudFront can. Cloudflare below Enterprise can't, and would need API Gateway, about $3k a month more at full scale.
-- **Without a CDN, spikes aren't absorbed.** DynamoDB limits reads of a single key, and Lambda adds at most 1,000 instances every 10 seconds.
 - **Codes rarely collide.** A taken code means the create draws again; five in a row fails it. At 1 billion links (codes drawn uniformly, each draw independent):
 
   ```
@@ -44,7 +45,7 @@ How to run it is in [infra/README.md](../../infra/README.md).
 
 ## Alternatives considered
 
-- **Stay on ECS and RDS:** cheaper without a CDN, but about $50 a month for practice and more to run.
+- **Stay on ECS and RDS:** cheaper without a CDN, but behind one it costs about the same. It also costs about $50 a month for practice and has more to run.
 - **Lambda Web Functions:** run the Node server as is, but are newer and capped at 10,000 requests a second per endpoint.
 - **API Gateway in front of Lambda:** a fee per request and not needed with a function URL.
 
