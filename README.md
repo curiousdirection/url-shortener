@@ -92,3 +92,4 @@ This is a design exercise. Design decisions (code length, storage, caching) are 
 - Up to 1 billion stored URLs.
 - 100 million daily active users.
 - About 1 billion redirects and 10 million new links a day (on average about 11,600 and 115 per second).
+- Spikes of up to 100 times that, without warning, for example when a link goes viral.
