@@ -30,7 +30,14 @@ How to run it is in [infra/README.md](../../infra/README.md).
 - **Without a CDN, full scale costs about twice the old stack,** because Lambda charges per request ("Cost" in [infra/README.md](../../infra/README.md)). Until the CDN is added, only the practice deployment makes sense.
 - **The CDN must be able to call the function by its AWS hostname.** CloudFront can. Cloudflare below Enterprise can't, and would need API Gateway, about $3k a month more at full scale.
 - **Without a CDN, spikes aren't absorbed.** DynamoDB limits reads of a single key, and Lambda adds at most 1,000 instances every 10 seconds.
-- **Codes rarely collide.** There are about 3.5 trillion 7-character codes. With 1 billion links stored, a new code is taken about 1 time in 3,500, and the create draws again. Five collisions in a row, which fails the create, is about 1 in 5 × 10¹⁷.
+- **Codes rarely collide.** A taken code means the create draws again; five in a row fails it. At 1 billion links (codes drawn uniformly, each draw independent):
+
+  ```
+  Possible codes:      62^7                          = 3,521,614,606,208  (≈ 3.5 trillion)
+  One draw is taken:   1,000,000,000 ÷ 3.52 × 10¹²   ≈ 0.000284           (≈ 1 in 3,500)
+  Create fails:        0.000284^5                    ≈ 1.8 × 10⁻¹⁸        (≈ 1 in 5 × 10¹⁷)
+  Retries per day:     10,000,000 creates × 0.000284 ≈ 2,840
+  ```
 - **Cold starts.** A request that needs a new copy of the function waits a few hundred milliseconds while it starts. That's common at practice size, and rare at full scale behind a CDN.
 - **The function URL is public until the CDN is added** ([docs/security.md](../security.md)).
 
