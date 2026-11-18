@@ -94,7 +94,7 @@ If a role is refused a `lambda:` or `logs:` action, add it in `bootstrap/deploy-
 
 ## Change the bootstrap
 
-CI never applies the bootstrap, so you do, after any change to its `.tf` files. This includes the first deploy after moving from ECS and RDS (the CI roles' permissions changed from ECS and ECR to Lambda) and the first deploy with CloudFront and AWS WAF: CI will be refused until you apply them.
+CI never applies the bootstrap, so you do, after any change to its `.tf` files. 
 
 ```bash
 terraform -chdir=infra/bootstrap plan
