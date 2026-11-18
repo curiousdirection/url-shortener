@@ -19,6 +19,8 @@ locals {
   # The CDN's function, made in infra/app/cdn.tf with this exact name.
   cdn_function_arn = "${local.cloudfront_arn}:function/${var.name}-forwarded-host"
 
+  cdn_web_acl_arn = "arn:aws:wafv2:us-east-1:${local.account_id}:global/webacl/${var.name}/*"
+
   # What Terraform reads when it refreshes the CDN (infra/app/cdn.tf), for both roles. CloudFront
   # makes up the ids of the distribution and the origin access control, so they can only be
   # matched with `*`.
@@ -42,6 +44,19 @@ locals {
       Effect   = "Allow"
       Action   = "cloudfront:ListTagsForResource"
       Resource = ["${local.cloudfront_arn}:distribution/*", local.cdn_function_arn]
+    },
+    # The web ACL (infra/app/waf.tf): a CloudFront one is always in us-east-1. WAF adds an id
+    # after the name, so the name is matched with `*` after it.
+    {
+      Effect   = "Allow"
+      Action   = ["wafv2:GetWebACL", "wafv2:ListTagsForResource"]
+      Resource = local.cdn_web_acl_arn
+    },
+    # The pricing plan. Its API has no resource-level permissions.
+    {
+      Effect   = "Allow"
+      Action   = ["pricingplanmanager:GetSubscription", "pricingplanmanager:ListSubscriptions"]
+      Resource = "*"
     },
   ]
 
