@@ -35,7 +35,7 @@ How to run it is in [infra/README.md](../../infra/README.md).
   ```
   Possible codes:      62^7                          = 3,521,614,606,208  (≈ 3.5 trillion)
   One draw is taken:   1,000,000,000 ÷ 3.52 × 10¹²   ≈ 0.000284           (≈ 1 in 3,500)
-  Create fails:        0.000284^5                    ≈ 1.8 × 10⁻¹⁸        (≈ 1 in 5 × 10¹⁷)
+  Create fails:        0.000284^5                    ≈ once every 150 million years at 10 million creates a day
   Retries per day:     10,000,000 creates × 0.000284 ≈ 2,840
   ```
 - **Cold starts.** A request that needs a new copy of the function waits a few hundred milliseconds while it starts. That's common at practice size, and rare at full scale behind a CDN.
