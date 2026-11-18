@@ -80,7 +80,7 @@ variable "system_log_level" {
 }
 
 variable "memory_size" {
-  description = "MB of memory for the function. Lambda gives CPU in proportion, so more memory is also faster."
+  description = "MB of memory for the function. 1024 because Lambda gives CPU in proportion to memory: at 256 MB cold requests were about twice as slow, at about the same cost per request."
   type        = number
-  default     = 256
+  default     = 1024
 }
