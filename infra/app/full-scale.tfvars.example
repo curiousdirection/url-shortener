@@ -3,5 +3,9 @@
 # ../foundation/full-scale.tfvars.example.
 memory_size = 512
 
+# Full scale pays as it goes: the Free plan's allowance is 1 million requests a month, and the
+# plan has no Origin Shield.
+flat_rate_plan = false
+
 # Origin Shield in the region AWS pairs with eu-north-1 (see the variable's description).
 origin_shield_region = "eu-west-2"

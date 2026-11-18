@@ -35,3 +35,17 @@ provider "aws" {
     }
   }
 }
+
+# For the resources that only exist in us-east-1: the web ACL and the pricing plan (waf.tf).
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project   = var.name
+      Stack     = "app"
+      ManagedBy = "terraform"
+    }
+  }
+}

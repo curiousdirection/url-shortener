@@ -40,6 +40,39 @@ variable "origin_shield_region" {
   default     = null
 }
 
+variable "rate_limit_all" {
+  description = "Requests of any kind that one IP address may send in 5 minutes before the web ACL answers 429. At least 10 (the WAF minimum)."
+  type        = number
+  default     = 1000
+
+  validation {
+    condition     = var.rate_limit_all >= 10
+    error_message = "rate_limit_all must be at least 10."
+  }
+}
+
+variable "rate_limit_create" {
+  description = "POST requests to /api/* (creating links) that one IP address may send in 5 minutes before the web ACL answers 429. At least 10 (the WAF minimum)."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.rate_limit_create >= 10
+    error_message = "rate_limit_create must be at least 10."
+  }
+}
+
+variable "flat_rate_plan" {
+  description = "Subscribe the distribution to CloudFront's Free flat-rate plan ($0; see \"Cost\" in infra/README.md). Set false for full scale, which pays as it goes, or if the subscription is refused (\"Set up and first run\" in infra/README.md)."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = !var.flat_rate_plan || var.origin_shield_region == null
+    error_message = "The Free plan doesn't include Origin Shield: set origin_shield_region to null or flat_rate_plan to false."
+  }
+}
+
 variable "memory_size" {
   description = "MB of memory for the function. Lambda gives CPU in proportion, so more memory is also faster."
   type        = number

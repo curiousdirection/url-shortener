@@ -48,6 +48,7 @@ resource "aws_cloudfront_distribution" "app" {
   enabled         = true
   is_ipv6_enabled = true
   http_version    = "http2and3"
+  web_acl_id      = aws_wafv2_web_acl.app.arn
 
   origin {
     origin_id                = local.origin_id
