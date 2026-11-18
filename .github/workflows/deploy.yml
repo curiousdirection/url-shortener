@@ -1,5 +1,5 @@
-# Deploys the app: build and push the image, apply infra/app, check /health. Starts when CI
-# has passed on main; run it by hand with app_version to roll back.
+# Deploys the app: build the zip, apply infra/app, check /health. Starts when CI has passed on
+# main; run it by hand with ref to roll back.
 name: Deploy
 
 on:
@@ -9,8 +9,8 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      app_version:
-        description: "Image tag to roll back to, as shown in an earlier Deploy run. Skips the build."
+      ref:
+        description: "Commit to roll back to, a full or short SHA from main's history. It is built and deployed as it was."
         required: false
         type: string
 
@@ -31,21 +31,32 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
-    runs-on: ubuntu-24.04-arm # builds the arm64 image natively
+    runs-on: ubuntu-latest
     environment: production # only main can use it, so only main gets the deploy keys
     permissions:
       contents: read
-    timeout-minutes: 45
+    timeout-minutes: 30
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
-      ROLLBACK_TO: ${{ inputs.app_version }}
+      ROLLBACK_TO: ${{ inputs.ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }} # the commit CI tested
+          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }} # the commit CI tested, or the one to roll back to
           fetch-depth: 0 # to compare with the deployed commit
+
+      # The zip is built before signing in to AWS, so the npm packages never run with
+      # credentials.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Build the zip
+        id: zip
+        run: echo "hash=$(infra/scripts/build-zip.sh)" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/setup-terraform
         with:
@@ -62,7 +73,7 @@ jobs:
           if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
             grep -q "No state file was found" err.txt || { cat err.txt >&2; exit 1; }
           fi
-          if ! grep -qx 'aws_ecs_express_gateway_service.app' <<<"${list:-}"; then
+          if ! grep -qx 'aws_lambda_function.app' <<<"${list:-}"; then
             echo "SKIP=torn-down" >> "$GITHUB_ENV"
             echo "### Deploy skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -70,7 +81,7 @@ jobs:
       # Docs or tests alone don't deploy. Compares the deployed commit with this one. A manual
       # rollback skips this check.
       - name: Skip if nothing in the app changed
-        if: env.SKIP == '' && inputs.app_version == ''
+        if: env.SKIP == '' && inputs.ref == ''
         run: |
           deployed="$(terraform -chdir=infra/app output -raw app_version)"
           if [ "$(infra/scripts/app-changed.sh "$deployed" HEAD)" = false ]; then
@@ -78,32 +89,25 @@ jobs:
             echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Build and push the image
-        id: image
-        if: env.SKIP == ''
-        run: |
-          repo="$(terraform -chdir=infra/app output -raw ecr_repository_url)"
-          tag="${ROLLBACK_TO:-$(infra/scripts/image-tag.sh)}"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          infra/scripts/push-image.sh "$repo" "$tag" ${ROLLBACK_TO:+--no-build}
-
-      # Apply exactly the saved plan. The apply waits for the release to go live; if Express
-      # Mode's canary rolls it back, this step fails. -lock-timeout waits for a local release.sh.
+      # Apply exactly the saved plan. -lock-timeout waits for a local release.sh.
       - name: Plan and apply
+        id: apply
         if: env.SKIP == ''
         env:
-          TAG: ${{ steps.image.outputs.tag }}
+          HASH: ${{ steps.zip.outputs.hash }}
         run: |
+          version="$(infra/scripts/app-version.sh)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           terraform -chdir=infra/app plan -input=false -lock-timeout=10m -no-color \
-            -var "app_version=$TAG" -out=tfplan | tee plan.txt
+            -var "app_version=$version" -var "package_hash=$HASH" -out=tfplan | tee plan.txt
           { echo '### Terraform plan'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           terraform -chdir=infra/app apply -input=false -lock-timeout=10m tfplan
 
       - name: Check /health
         if: env.SKIP == ''
         env:
-          TAG: ${{ steps.image.outputs.tag }}
+          VERSION: ${{ steps.apply.outputs.version }}
         run: |
           url="$(terraform -chdir=infra/app output -raw url)"
           curl -fsS --retry 6 --retry-delay 10 --retry-all-errors "$url/health"
-          echo "### Deployed \`$TAG\` to $url${ROLLBACK_TO:+ (rollback)}" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Deployed \`$VERSION\` to $url${ROLLBACK_TO:+ (rollback)}" >> "$GITHUB_STEP_SUMMARY"

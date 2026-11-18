@@ -1,6 +1,6 @@
-# The app stack: the parts that change on every release. The container image repository, the
-# log group and the ECS Express Mode service. Everything it depends on (network, database,
-# roles) is in ../foundation. See docs/decisions/0003.
+# The app stack: the parts that change on every release. The Lambda function, its URL and the
+# log group. Everything it depends on (the table and the function's role) is in ../foundation.
+# See docs/decisions/0003 and 0006.
 #
 # This is the only stack that CI applies (.github/workflows/deploy.yml), with the
 # `github-deploy-url-shortener` role from ../bootstrap.

@@ -1,8 +1,8 @@
-# The deploy role, used by .github/workflows/deploy.yml to push the image and apply infra/app.
+# The deploy role, used by .github/workflows/deploy.yml to apply infra/app.
 
 resource "aws_iam_role" "deploy" {
   name                 = "github-deploy-${var.name}"
-  max_session_duration = 3600 # the apply waits for the release to go live
+  max_session_duration = 3600 # an apply can take a while
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -29,18 +29,15 @@ resource "aws_iam_user_policy" "deploy_assume_role" {
 }
 
 locals {
-  ecr_repository_arn = "arn:aws:ecr:${var.region}:${local.account_id}:repository/${var.name}"
-  log_group_arn      = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/${var.name}/app"
-  # The two roles ECS uses, made in infra/foundation/iam.tf with these exact names.
-  ecs_role_arns = [
-    "arn:aws:iam::${local.account_id}:role/${var.name}-execution",
-    "arn:aws:iam::${local.account_id}:role/${var.name}-infrastructure",
-  ]
+  function_arn  = "arn:aws:lambda:${var.region}:${local.account_id}:function:${var.name}"
+  log_group_arn = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/${var.name}/app"
+  # The function's role, made in infra/foundation/iam.tf with this exact name.
+  lambda_role_arn = "arn:aws:iam::${local.account_id}:role/${var.name}-lambda"
 }
 
-# Only what the image push and `terraform apply` in infra/app need. It can update the service
-# but not create or delete it, so a change that would replace the service fails in CI instead
-# of taking the app down.
+# Only what `terraform apply` in infra/app needs. It can update the function, its URL and its
+# log group but not create or delete them, so a change that would replace the function fails in
+# CI instead of taking the app down.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id
@@ -56,42 +53,24 @@ resource "aws_iam_role_policy" "deploy" {
       },
       { Effect = "Allow", Action = "s3:GetObject", Resource = local.foundation_state },
 
-      # Images: the login token isn't tied to a repository. Then the one repository: push,
-      # read and update settings. Not create or delete.
-      { Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
+      # The one function: read everything Terraform refreshes, and change its code, settings,
+      # URL settings, public-access policy and tags.
       {
         Effect = "Allow"
         Action = [
-          "ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer", "ecr:DescribeImages", "ecr:ListImages",
-          "ecr:DescribeRepositories", "ecr:ListTagsForResource", "ecr:GetLifecyclePolicy",
-          "ecr:PutLifecyclePolicy", "ecr:TagResource", "ecr:UntagResource",
+          "lambda:Get*", "lambda:List*",
+          "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
+          "lambda:UpdateFunctionUrlConfig", "lambda:AddPermission", "lambda:RemovePermission",
+          "lambda:TagResource", "lambda:UntagResource",
         ]
-        Resource = local.ecr_repository_arn
+        Resource = local.function_arn
       },
-
-      # The Express service. Express Mode builds the rest itself, with the infrastructure role.
-      # These actions don't support narrower resources than "*".
-      #   https://aws.amazon.com/blogs/containers/automated-deployments-with-github-actions-for-amazon-ecs-express-mode/
-      {
-        Effect = "Allow"
-        Action = [
-          "ecs:DescribeExpressGatewayService", "ecs:UpdateExpressGatewayService",
-          "ecs:DescribeServices", "ecs:UpdateService", "ecs:DescribeServiceRevisions",
-          "ecs:DescribeServiceDeployments", "ecs:ListServiceDeployments",
-          "ecs:DescribeClusters", "ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition",
-          "ecs:DescribeTasks", "ecs:ListTasks", "ecs:ListTagsForResource",
-          "ecs:TagResource", "ecs:UntagResource",
-        ]
-        Resource = "*"
-      },
-      # The one IAM permission a deploy needs: handing the two ECS roles to ECS.
+      # The one IAM permission a deploy needs: handing the function's role to Lambda.
       {
         Effect    = "Allow"
         Action    = "iam:PassRole"
-        Resource  = local.ecs_role_arns
-        Condition = { StringEquals = { "iam:PassedToService" = ["ecs.amazonaws.com", "ecs-tasks.amazonaws.com"] } }
+        Resource  = local.lambda_role_arn
+        Condition = { StringEquals = { "iam:PassedToService" = "lambda.amazonaws.com" } }
       },
 
       # The log group.

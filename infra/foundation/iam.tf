@@ -1,54 +1,40 @@
-# The two IAM roles ECS uses for the app. They're here, not in the app stack, so the CI
-# deploy role never has to create or change roles. It only passes these two to ECS.
+# The role the Lambda function runs as. It is here, not in the app stack, so the CI deploy role
+# never has to create or change roles. It only passes this one to Lambda.
 #
-# The names are fixed (not `name_prefix`) so that the deploy role's PassRole rule can name
-# them exactly.
+# The name is fixed (not `name_prefix`) so that the deploy role's PassRole rule can name it
+# exactly.
 
-# Used by ECS itself (not by the app) to pull the image, write logs and read the DB password.
-resource "aws_iam_role" "execution" {
-  name = "${var.name}-execution"
+resource "aws_iam_role" "lambda" {
+  name = "${var.name}-lambda"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Principal = { Service = "lambda.amazonaws.com" }
       Action    = "sts:AssumeRole"
     }]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "execution" {
-  role       = aws_iam_role.execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-# The parameter uses the default AWS-managed key, so no KMS permission is needed.
-resource "aws_iam_role_policy" "execution_db_password" {
-  role = aws_iam_role.execution.name
+# All the function may do: read and write items in the one table, and write its own logs. The
+# log group is made by the app stack; it is named here because the foundation is applied first.
+resource "aws_iam_role_policy" "lambda" {
+  role = aws_iam_role.lambda.name
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "ssm:GetParameters"
-      Resource = aws_ssm_parameter.db_password.arn
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem"]
+        Resource = aws_dynamodb_table.urls.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/${var.name}/app:*"
+      },
+    ]
   })
 }
 
-# Lets ECS create and delete the load balancer, certificate and so on.
-resource "aws_iam_role" "infrastructure" {
-  name = "${var.name}-infrastructure"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "infrastructure" {
-  role       = aws_iam_role.infrastructure.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"
-}
+data "aws_caller_identity" "current" {}

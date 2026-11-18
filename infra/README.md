@@ -1,31 +1,30 @@
 # Deploying to AWS
 
-Runs the app on [Amazon ECS Express Mode](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-overview.html) with an RDS Postgres database. Practice uses the defaults in the `variables.tf` files; the `full-scale.tfvars.example` files show full-scale sizes (reference only).
+Runs the app as one [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) function with a function URL, and keeps the links in a DynamoDB table. Why: [ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md). Practice uses the defaults in the `variables.tf` files; the `full-scale.tfvars.example` files show full-scale settings (reference only).
 
 ```
-Internet -> ALB (HTTPS) -> Fargate tasks (:3000, public subnets) -> RDS Postgres 16 (private subnets)
+Internet -> function URL (HTTPS) -> Lambda function -> DynamoDB table
 ```
 
-From the one service in `app/main.tf`, Express Mode creates the load balancer, HTTPS certificate, autoscaling and canary deployments ([what it creates](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)). Tasks get public IPs instead of a NAT gateway, and only the load balancer can reach them.
-
-A push to `main` that changes the app is deployed by GitHub Actions. Why it is built this way is in [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md).
+A push to `main` that changes the app is deployed by GitHub Actions. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md).
 
 ## The three stacks
 
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
-| `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once |
-| `foundation/` | The VPC, the database and its password, security groups, the ECS roles | You, from your machine |
-| `app/` | ECR, the log group, the ECS Express service | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
+| `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
+| `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
+| `app/` | The Lambda function, its function URL, its log group | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 All three states are in the S3 bucket.
 
 ## Prerequisites
 
 - Terraform via [tfenv](https://github.com/tfutils/tfenv): run `tfenv install` in the repo (1.11 or newer).
-- An AWS CLI profile that can create the resources (admin is simplest), Docker and git.
+- Node.js at the version in `.node-version` (the zip is built on your machine for `release.sh`), `zip` and `openssl`.
+- An AWS CLI profile that can create the resources (admin is simplest), and git.
 - Your account's region (AWS Settings > Project). The default is `eu-north-1`; to change it, put `region = "..."` in a `terraform.tfvars` in each stack folder.
-- Everything used is on the AWS Free plan ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
+- Everything used is allowed on the AWS Free plan ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
 
 ## Set up and first run
 
@@ -74,28 +73,37 @@ Do these once, in order, on a commit that is on `main`.
    unset key
    ```
 
-5. **Apply the foundation.** Read the plan first. It takes 10-15 minutes because it creates the database.
+5. **Apply the foundation.** Read the plan first. It takes a few seconds.
 
    ```bash
    terraform -chdir=infra/foundation apply
    ```
 
-6. **Stand the app up from your machine**, because CI only updates a service that already exists.
+6. **Create the function from your machine**, because CI only updates a function that already exists.
 
    ```bash
    infra/scripts/release.sh
    curl $(terraform -chdir=infra/app output -raw url)/health   # {"status":"ok"}
    ```
 
-   If it fails with "Unable to assume the service linked role", ECS has just created that role for the account: run `release.sh` again a minute later.
+7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that CI can sign in.
 
-7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `app_version` empty) to check that CI can sign in.
+If a role is refused a `lambda:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
 
-If a role is refused an `ecs:`, `ecr:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
+## Change the bootstrap
+
+CI never applies the bootstrap, so you do, after any change to its `.tf` files. This includes the first deploy after moving from ECS and RDS: the CI roles' permissions changed from ECS and ECR to Lambda, and CI will be refused until you apply them.
+
+```bash
+terraform -chdir=infra/bootstrap plan
+terraform -chdir=infra/bootstrap apply
+```
+
+The access keys and GitHub settings stay as they are.
 
 ## Deploy
 
-**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. Each task runs the migrations before it starts ([ADR 0001](../docs/decisions/0001-run-migrations-on-every-instance.md)).
+**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
 
 **Infrastructure changes** (`bootstrap/` or `foundation/`): CI never applies these. Plan and apply them yourself, before merging anything that needs them:
 
@@ -108,53 +116,41 @@ terraform -chdir=infra/foundation apply
 
 Repeat step 4 (a user can hold two keys, so the old one works until you delete it), then delete the old key: `aws iam delete-access-key --user-name <user> --access-key-id <old key id>`, with the id from `aws iam list-access-keys --user-name <user>`.
 
-## Rotate the database password
-
-Raise `db_password_version` by one in `infra/foundation/terraform.tfvars` and apply the foundation. The parameter and the database get the new password in the same apply.
-
-Running tasks keep the old password, so every new connection fails until they are replaced. Either rotate while the stack is torn down, or do it at a quiet time and stop the tasks straight after (expect 1-3 minutes of errors):
-
-```bash
-for task in $(aws ecs list-tasks --region eu-north-1 --cluster default --service-name url-shortener --query 'taskArns[]' --output text); do
-  aws ecs stop-task --region eu-north-1 --cluster default --task "$task" --reason "DB password rotated" >/dev/null
-done
-```
-
-Don't use a new release for this: the old tasks' errors can trip the canary's alarm and roll it back.
-
 ## Rollback
 
-A release first gets 5% of traffic and rolls back by itself if its error alarm fires; the apply step then fails and so does the run. The alarm adds the app's 4xx to its 5xx, ignoring fewer than 5 4xx in a check, and fires above 1% of requests ([docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)). A few stray 404s don't matter, but if more than 1% of real traffic is unknown codes or taken aliases, a good release rolls back.
+A release replaces the running code at once, with no gradual rollout and no automatic rollback. The Deploy workflow checks `/health` afterwards and fails if it doesn't answer, but the bad version stays live until you replace it.
 
-To go back to an earlier release, run the Deploy workflow by hand with `app_version` set to that release's image tag, shown in its Deploy run (it skips the build), or revert the commit on `main`.
+To go back, run the Deploy workflow by hand with `ref` set to the commit to return to (a commit on `main` from after this change). It builds that commit and deploys it. Or revert the commit on `main`.
 
-ECR keeps the last 10 images. Migrations aren't rolled back, so each must work with the previous code too.
+The table is not rolled back. Keep each change to what is stored compatible with the previous code.
 
 ## Tear down
 
-App first, then the foundation (the service uses the foundation's roles):
+App first, then the foundation (the function uses the foundation's role):
 
 ```bash
-terraform -chdir=infra/app destroy -var app_version=none
+terraform -chdir=infra/app destroy -var app_version=none -var package_hash=none
 terraform -chdir=infra/foundation destroy
 ```
 
-Express Mode removes what it created. The bootstrap stays; it costs almost nothing. To remove it too, delete the two users' access keys (Terraform can't delete a user that has one), move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
+If the table has deletion protection on, set `table_deletion_protection = false` in `infra/foundation/terraform.tfvars` and apply first. Destroying the table deletes the links, and its point-in-time backups with them.
 
-Then check nothing is left; both should print nothing:
+The bootstrap stays; it costs almost nothing. To remove it too, delete the two users' access keys (Terraform can't delete a user that has one), move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
+
+Then check nothing is left; it should print nothing:
 
 ```bash
 aws resourcegroupstaggingapi get-resources --region eu-north-1 --tag-filters Key=Project,Values=url-shortener --query 'ResourceTagMappingList[].ResourceARN' --output text
-aws rds describe-db-snapshots --region eu-north-1 --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
 ```
 
-The first lists the state bucket while the bootstrap exists, and can list deleted resources for a few hours; if `terraform state list` is empty in `app/` and `foundation/`, they're stale. The second lists manual snapshots; only `url-shortener-final-*` ones are from this stack (full-scale settings keep one; delete it with `aws rds delete-db-snapshot --db-snapshot-identifier <name>`). An empty `default` ECS cluster may stay behind; it's free.
+It lists the state bucket while the bootstrap exists, and can list deleted resources for a few hours; if `terraform state list` is empty in `app/` and `foundation/`, they're stale.
 
 ## Cost
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $50/month if left running: load balancer ~$17, one small task ~$8, database ~$14 including 20 GB of storage, public IPv4 ~$11. Destroy between sessions and it's a few dollars a month. Set a budget alert in the AWS console.
-- **Full scale:** about $6,200/month: data transfer out ~$2,650, load balancer ~$2,590 (it bills by new connections per second, and nearly every redirect is one), tasks ~$440, RDS ~$430 (Multi-AZ instance and 300 GB), IPv4 ~$40. An NLB with EC2 servers would cost roughly $2,100 less, for more parts to run ([ADR 0002](../docs/decisions/0002-deploy-with-ecs-express-mode.md)).
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, and the function URL is free.
+- **Full scale, without a CDN:** about $15,500/month, 2.5 times the old ECS and RDS stack (about $6,200). Lambda's request fee alone is about $6,100 at about 30 billion requests a month. Data transfer out (about $2,650) is the same as before. The rest is Lambda run time and DynamoDB reads and writes.
+- **Full scale, behind a CDN** that answers most redirects from its cache, the origin costs about $1.2k/month, about the same as ECS and RDS did. That is why the design assumes a CDN ([ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md)).
 
-Don't send per-request logs to CloudWatch: ~200 GB/day would add ~$3,300/month.
+Set a budget alert in the AWS console.
