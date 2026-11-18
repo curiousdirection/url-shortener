@@ -1,6 +1,6 @@
 # 5. Generate short codes from a Postgres sequence, not a Redis counter
 
-Date: 2026-11-18. Status: accepted. Records a decision made in [#3](https://github.com/curiousdirection/url-shortener/pull/3) (2026-11-11); the reasons beyond #3's own came from a later review.
+Date: 2026-11-18. Status: superseded by [0006](0006-move-to-lambda-and-dynamodb.md). Records a decision made in [#3](https://github.com/curiousdirection/url-shortener/pull/3) (2026-11-11); the reasons beyond #3's own came from a later review.
 
 ## Context
 

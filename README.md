@@ -1,56 +1,52 @@
 # URL Shortener
 
-Node + TypeScript + Hono + Postgres. Short codes come from a Postgres sequence (`nextval('url_code_seq')`), base62-encoded and offset so codes are at least 6 characters.
+Node + TypeScript + Hono, on AWS Lambda and DynamoDB. A short code is 7 random base62 characters, written only if it is free.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     client([Client])
-    alb["Application Load Balancer<br/>HTTPS, GET /health"]
 
-    subgraph app["Fargate tasks: 1 to N, each running the app"]
-        subgraph node["Node app (Hono)"]
-            routes["app.ts<br/>routes + zod validation"]
-            service["urlService.ts<br/>create / resolve"]
-            gen["codeGenerator.ts<br/>nextval + base62"]
-            routes --> service
-            service -->|"no alias"| gen
-        end
+    subgraph lambda["Lambda function (function URL, HTTPS)"]
+        routes["app.ts<br/>routes + zod validation"]
+        service["urlService.ts<br/>create / resolve"]
+        gen["codeGenerator.ts<br/>7 random base62 characters"]
+        routes --> service
+        service -->|"no alias"| gen
     end
 
-    subgraph pg["Postgres (RDS, private subnets)"]
+    subgraph ddb["DynamoDB (on-demand)"]
         urls[("urls<br/>code PK, long_url")]
-        seq[["url_code_seq"]]
     end
 
-    client -->|"POST /api/urls"| alb
-    client -->|"GET /:code"| alb
-    alb -->|":3000, only healthy tasks"| routes
-    routes -.->|"201 / 409 / 302 / 404"| alb
-    alb -.-> client
+    client -->|"POST /api/urls"| routes
+    client -->|"GET /:code"| routes
+    routes -.->|"201 / 409 / 302 / 404"| client
 
-    service -->|"INSERT / SELECT"| urls
-    gen -->|"nextval()"| seq
+    service -->|"PutItem if code is free"| urls
+    service -->|"GetItem"| urls
 ```
 
-- **Deployed:** a load balancer sends requests to whichever tasks pass the health check, and all tasks share one Postgres. Locally it's one process and one Postgres.
-- **Create:** a custom alias is inserted as the code. Otherwise `codeGenerator` takes the next sequence value, base62-encodes it (offset so codes are at least 6 characters) and inserts it. A unique violation on an alias returns `409`; on a generated code (it collided with an alias) the next value is tried, up to 5 times.
-- **Resolve:** `urls` is looked up by primary key `code` and the app answers with a `302` redirect, or `404`.
+- **Deployed:** the function URL is the public address and runs the function. There is no server to keep running, and nothing is paid for while idle. A CDN in front of it is planned ([ADR 0006](docs/decisions/0006-move-to-lambda-and-dynamodb.md)). Locally it's one Node process (`src/server.ts`) and DynamoDB Local.
+- **Create:** a custom alias is written as the code. Otherwise `codeGenerator` makes a random code and writes it. The write only succeeds if the code is free: a taken alias returns `409`; a taken generated code is replaced by a new one, up to 5 times.
+- **Resolve:** the table is read by its key `code`, and the app answers with a `302` redirect, or `404`. A code that isn't found is read once more, strongly consistent, so a new link never answers `404`.
 
 ## Run locally
+
+Needs Node.js at the version in `.node-version`, and Docker for DynamoDB Local.
 
 ```bash
 docker compose up -d
 cp .env.example .env
 npm install
-npm run migrate
+npm run db:setup
 npm run dev
 ```
 
 ## Deploy
 
-The `Dockerfile` builds the app image, and [`infra/`](infra/README.md) runs it on AWS with ECS Express Mode and RDS Postgres. A push to `main` that changes the app is tested, built and deployed by GitHub Actions (`.github/workflows/ci.yml`, then `deploy.yml`). The one-time setup, the manual first run and rollback are in [`infra/README.md`](infra/README.md).
+[`infra/`](infra/README.md) runs the app on AWS as a Lambda function with a function URL, and the links in DynamoDB. A push to `main` that changes the app is tested, zipped and deployed by GitHub Actions (`.github/workflows/ci.yml`, then `deploy.yml`). The one-time setup, the manual first run and rollback are in [`infra/README.md`](infra/README.md).
 
 What protects the app and its deployment, and what isn't covered yet: [`docs/security.md`](docs/security.md).
 
@@ -76,11 +72,11 @@ Leave out `alias` to get a generated code. Then open `http://localhost:3000/my-l
 
 ## Test
 
-Tests use a separate Postgres (`postgres-test`, port 5433), RAM-only so it is wiped on restart, configured in `.env.test`, because they truncate tables. Vitest refuses to run if the database name doesn't end in `_test`.
+Tests use a separate DynamoDB Local (`dynamodb-test`, port 8001), in memory so it is wiped on restart, configured in `.env.test`, because they empty the table. Vitest refuses to run if the table name doesn't end in `_test`.
 
 ```bash
 docker compose up -d
-npm run migrate:test
+npm run db:setup:test
 npm test
 ```
 

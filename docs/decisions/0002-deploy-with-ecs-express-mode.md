@@ -1,6 +1,6 @@
 # 2. Deploy with ECS Express Mode
 
-Date: 2026-11-13. Status: accepted.
+Date: 2026-11-13. Status: superseded by [0006](0006-move-to-lambda-and-dynamodb.md).
 
 ## Context
 
