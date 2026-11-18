@@ -13,7 +13,6 @@ Take the number from a Postgres sequence (`nextval('url_code_seq')`) in the same
 ## Why
 
 - **One service on the create path.** Creating a link needs only Postgres. With Redis, a create fails if either Redis or Postgres is down. (This was #3's reason.)
-- **Durable by default.** A Postgres sequence never reissues a used number, even after a crash or failover. Redis copies writes to its replicas after answering, so a failover can rewind the counter unless it is set up for synchronous durability. A rewound counter makes creates fail until it is fixed by hand.
 - **Counter and links share fate.** They live in the same database and the same backups, so a restore puts both back to the same moment. A separate counter can be restored, reset or lost on its own.
 - **Load is not a reason for Redis.** At full scale creates average about 115/s. The `INSERT` that follows each `nextval` is the heavier part, and a separate counter wouldn't remove it.
 
