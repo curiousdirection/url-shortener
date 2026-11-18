@@ -13,3 +13,4 @@ This AWS account is a Free-plan project account, so AWS's [fixed SCPs](https://d
 ## Writing docs, comments and CI
 
 - **One home per fact.** Why we decided something goes in the ADR; how to operate it (steps, commands) in `infra/README.md`; what protects what in `docs/security.md`; how a piece of code works, or a trap in it, in one comment next to that code. Everywhere else links to it or says nothing.
+- **Before committing, read the diff for repeats.** If a fact appears more than once, keep it in its home and cut the rest.
