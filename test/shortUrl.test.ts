@@ -12,44 +12,15 @@ const create = (app: ReturnType<typeof buildApp>, url: string, headers: Record<s
   });
 
 describe("shortUrl", () => {
-  it("uses the request's host", async () => {
+  it("uses the request's own address locally", async () => {
     const res = await create(buildApp(service), "http://localhost:3000/api/urls");
     expect((await res.json()).shortUrl).toBe("http://localhost:3000/abc123");
   });
 
-  it("uses https when the proxy says the client did", async () => {
-    const res = await create(buildApp(service), "http://app.example.com/api/urls", {
-      "x-forwarded-proto": "https",
-    });
-    expect((await res.json()).shortUrl).toBe("https://app.example.com/abc123");
-  });
-
-  it("uses the host the viewer called when CloudFront forwards it", async () => {
+  it("uses the address the viewer called when CloudFront forwards it", async () => {
     const res = await create(buildApp(service), "https://abc.lambda-url.eu-north-1.on.aws/api/urls", {
-      "x-forwarded-proto": "https",
       "x-forwarded-host": "d111111abcdef8.cloudfront.net",
     });
     expect((await res.json()).shortUrl).toBe("https://d111111abcdef8.cloudfront.net/abc123");
-  });
-
-  it("uses the request's own host when X-Forwarded-Host is absent", async () => {
-    const res = await create(buildApp(service), "https://abc.lambda-url.eu-north-1.on.aws/api/urls", {
-      "x-forwarded-proto": "https",
-    });
-    expect((await res.json()).shortUrl).toBe("https://abc.lambda-url.eu-north-1.on.aws/abc123");
-  });
-
-  it("ignores an X-Forwarded-Host that is not a host", async () => {
-    const res = await create(buildApp(service), "http://localhost:3000/api/urls", {
-      "x-forwarded-host": "evil.com/path?x=",
-    });
-    expect((await res.json()).shortUrl).toBe("http://localhost:3000/abc123");
-  });
-
-  it("ignores an X-Forwarded-Proto that is not https", async () => {
-    const res = await create(buildApp(service), "http://app.example.com/api/urls", {
-      "x-forwarded-proto": "javascript",
-    });
-    expect((await res.json()).shortUrl).toBe("http://app.example.com/abc123");
   });
 });

@@ -27,16 +27,11 @@ const createSchema = z.object({
     .optional(),
 });
 
-// What a Host header can look like. Anything else is ignored.
-const HOST_PATTERN = /^[A-Za-z0-9.-]+(:\d{1,5})?$/;
-
-// The address the client called. X-Forwarded-Host is set by CloudFront (forwarded-host.js), the
-// only caller, so it's trusted; X-Forwarded-Proto by the function URL. Locally, neither is set.
+// The address the client called. Behind CloudFront, X-Forwarded-Host holds it (forwarded-host.js).
 const requestOrigin = (c: Context) => {
-  const { protocol, host } = new URL(c.req.url);
+  const url = new URL(c.req.url);
   const forwarded = c.req.header("x-forwarded-host");
-  const publicHost = forwarded && HOST_PATTERN.test(forwarded) ? forwarded : host;
-  return c.req.header("x-forwarded-proto") === "https" ? `https://${publicHost}` : `${protocol}//${publicHost}`;
+  return forwarded ? `${url.protocol}//${forwarded}` : url.origin;
 };
 
 // CloudFront caches a redirect for a day, browsers don't (so a takedown needs only an
