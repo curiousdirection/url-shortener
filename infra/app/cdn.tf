@@ -5,7 +5,7 @@ locals {
   # AWS managed policies, by their fixed IDs:
   #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
   #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-origin-request-policies.html
-  # The Free flat-rate plan allows only managed policies, and CI can't create policies anyway.
+  # Only managed policies, because CI can't create policies.
   #
   # CachingOptimized: the cache key is the path alone (no query strings or cookies, and no
   # headers except a normalized Accept-Encoding), and the TTL follows the origin's Cache-Control
@@ -48,7 +48,7 @@ resource "aws_cloudfront_distribution" "app" {
   enabled         = true
   is_ipv6_enabled = true
   http_version    = "http2and3"
-  web_acl_id      = aws_wafv2_web_acl.app.arn
+  web_acl_id      = var.rate_limiting ? aws_wafv2_web_acl.app[0].arn : null
 
   origin {
     origin_id                = local.origin_id

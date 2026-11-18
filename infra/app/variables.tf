@@ -62,15 +62,10 @@ variable "rate_limit_create" {
   }
 }
 
-variable "flat_rate_plan" {
-  description = "Subscribe the distribution to CloudFront's Free flat-rate plan ($0; see \"Cost\" in infra/README.md). Set false for full scale, which pays as it goes, or if the subscription is refused (\"Set up and first run\" in infra/README.md)."
+variable "rate_limiting" {
+  description = "Put the AWS WAF rate limits on the distribution. Off for practice, because WAF costs about $7 a month even when idle; on at full scale (see \"Cost\" in infra/README.md)."
   type        = bool
-  default     = true
-
-  validation {
-    condition     = !var.flat_rate_plan || var.origin_shield_region == null
-    error_message = "The Free plan doesn't include Origin Shield: set origin_shield_region to null or flat_rate_plan to false."
-  }
+  default     = false
 }
 
 variable "memory_size" {

@@ -36,7 +36,7 @@ provider "aws" {
   }
 }
 
-# For the resources that only exist in us-east-1: the web ACL and the pricing plan (waf.tf).
+# For the resource that only exists in us-east-1: the web ACL (waf.tf).
 provider "aws" {
   alias  = "us_east_1"
   region = "us-east-1"

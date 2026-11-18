@@ -52,12 +52,6 @@ locals {
       Action   = ["wafv2:GetWebACL", "wafv2:ListTagsForResource"]
       Resource = local.cdn_web_acl_arn
     },
-    # The pricing plan. Its API has no resource-level permissions.
-    {
-      Effect   = "Allow"
-      Action   = ["pricingplanmanager:GetSubscription", "pricingplanmanager:ListSubscriptions"]
-      Resource = "*"
-    },
   ]
 
   # Explicit denies for both roles: they hold even if an allow is widened by mistake.

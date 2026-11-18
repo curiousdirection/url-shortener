@@ -11,8 +11,8 @@ Date: 2026-11-18. Status: accepted; follows [0006](0006-move-to-lambda-and-dynam
 - **Amazon CloudFront, in the app stack,** at its own `*.cloudfront.net` address. No custom domain or certificate.
 - **The function accepts only CloudFront.** The function URL needs a signed call (`AWS_IAM`), CloudFront signs with an origin access control (OAC), and the function's policy names this one distribution.
 - **Redirects are cached by the origin's headers:** a redirect for a day, a 404 for 10 seconds. `/api/*` and `/health` are never cached.
-- **Rate limiting per IP with AWS WAF** on the distribution: 1,000 requests and 20 link creations (`POST /api/*`) per 5 minutes, then `429`.
-- **Practice uses CloudFront's Free flat-rate plan** ($0). Full scale pays as it goes. Origin Shield is a variable, off for practice.
+- **Rate limiting per IP with AWS WAF** on the distribution, at full scale: 1,000 requests and 20 link creations (`POST /api/*`) per 5 minutes, then `429`. It is a switch (`rate_limiting`), off for practice.
+- **Pay as you go.** CloudFront's flat-rate plans would include WAF, but Free Tier accounts like this one can't use them ([plans](https://docs.aws.amazon.com/PricingPlanManager/latest/UserGuide/plans.html)). Origin Shield is a variable, off for practice.
 - **No in-process cache or Redis, and no API Gateway.** The CDN is the cache.
 
 How to run it is in [infra/README.md](../../infra/README.md).
@@ -22,7 +22,7 @@ How to run it is in [infra/README.md](../../infra/README.md).
 - **Only CloudFront can call the function.** It calls a function URL by its AWS hostname and signs the request. Cloudflare can do that only on Enterprise; below that it needs API Gateway in front, about $3k a month more at full scale.
 - **The price is published.** Cloudflare's full-scale price needs a sales quote.
 - **Same AWS account and Terraform,** with a free `cloudfront.net` address.
-- **$0 for practice** with the Free plan.
+- **About $0 for practice.** CloudFront's free tier covers practice traffic. WAF would cost about $7 a month even when idle, so it is off for practice.
 
 ## Consequences
 
@@ -31,7 +31,7 @@ How to run it is in [infra/README.md](../../infra/README.md).
 - **Creating a link needs a body hash.** The function URL needs a signed body, so a client sends `x-amz-content-sha256` (the body's SHA-256 in hex) with every `POST` ([README](../../README.md#api)).
 - **Redirects are cached for a day.** Taking down a link needs a cache invalidation, and browsers may keep the redirect as long.
 - **Rate limiting is per IP,** so a flood spread across many IPs still gets through. CloudFront's built-in DDoS protection and the cache handle that.
-- **The Free plan allows 1 million requests a month,** no custom policies and no Origin Shield. It needs a web ACL, which the rate limits use.
+- **Practice doesn't exercise the rate limits.** Turn them on for a session to try them ("Deploy" in [infra/README.md](../../infra/README.md)).
 
 ## Alternatives considered
 

@@ -1,8 +1,10 @@
-# Rate limiting by client IP, and the CloudFront pricing plan. Why: docs/decisions/0007-cdn-cloudfront.md.
+# Rate limiting by client IP. Why: docs/decisions/0007-cdn-cloudfront.md. Only made when
+# rate_limiting is true (full scale): WAF bills about $7 a month even when idle.
 
 # A web ACL for CloudFront must be in us-east-1, whatever region the rest of the stack uses.
 # That region is allowed on this account (docs/security.md).
 resource "aws_wafv2_web_acl" "app" {
+  count       = var.rate_limiting ? 1 : 0
   provider    = aws.us_east_1
   name        = var.name
   description = "Rate limits for the ${var.name} distribution"
@@ -113,20 +115,4 @@ resource "aws_wafv2_web_acl" "app" {
     metric_name                = var.name
     sampled_requests_enabled   = true
   }
-}
-
-# The Free flat-rate plan: $0 instead of pay-as-you-go. It covers the distribution and this web
-# ACL, and needs both. Only a Free plan is made here; full scale pays as it goes (see "Cost" in
-# infra/README.md). Its API is in us-east-1. Once subscribed, CloudFront refuses to delete the
-# distribution or take off the web ACL, so Terraform removes the subscription first.
-resource "aws_pricingplanmanager_subscription" "app" {
-  count    = var.flat_rate_plan ? 1 : 0
-  provider = aws.us_east_1
-
-  plan_family = "CloudFront"
-  plan_tier   = "FREE"
-  resource_arns = [
-    aws_cloudfront_distribution.app.arn,
-    aws_wafv2_web_acl.app.arn,
-  ]
 }

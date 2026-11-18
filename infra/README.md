@@ -3,7 +3,7 @@
 Runs the app as one [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) function with a function URL, behind an [Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Introduction.html) distribution, and keeps the links in a DynamoDB table. Why: [ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md) and [ADR 0007](../docs/decisions/0007-cdn-cloudfront.md). Practice uses the defaults in the `variables.tf` files; the `full-scale.tfvars.example` files show full-scale settings (reference only).
 
 ```
-Internet -> CloudFront (*.cloudfront.net, AWS WAF rate limits) -> function URL (signed) -> Lambda function -> DynamoDB table
+Internet -> CloudFront (*.cloudfront.net; AWS WAF rate limits at full scale) -> function URL (signed) -> Lambda function -> DynamoDB table
 ```
 
 CloudFront is the only way in: the function URL refuses unsigned calls.
@@ -16,7 +16,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 | --- | --- | --- |
 | `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
 | `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
-| `app/` | The Lambda function, its function URL, its log group, the CloudFront distribution, the AWS WAF web ACL and the pricing plan | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
+| `app/` | The Lambda function, its function URL, its log group, the CloudFront distribution and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 All three states are in the S3 bucket.
 
@@ -88,15 +88,13 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
    curl $(terraform -chdir=infra/app output -raw url)/health   # {"status":"ok"}
    ```
 
-   The apply also subscribes the distribution to CloudFront's Free flat-rate plan ([the plan](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html): $0, but only 1 million requests and 100 GB a month, no Origin Shield, no custom cache or origin request policies; this stack uses only managed ones). If AWS refuses the subscription, because the Free-plan account blocks the `pricingplanmanager` actions or isn't eligible for plans, put `flat_rate_plan = false` in `infra/app/terraform.tfvars` and run `release.sh` again. CloudFront then bills as you go (about $0 at practice traffic, within its free tier) and WAF costs about $7 a month ("Cost" below). To subscribe later by hand instead: `aws pricing-plan-manager create-subscription --region us-east-1 --plan-family CloudFront --plan-tier FREE --resource-arns <distribution ARN> <web ACL ARN>`.
-
 7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that CI can sign in.
 
 If a role is refused a `lambda:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
 
 ## Change the bootstrap
 
-CI never applies the bootstrap, so you do, after any change to its `.tf` files. This includes the first deploy after moving from ECS and RDS (the CI roles' permissions changed from ECS and ECR to Lambda) and the first deploy with CloudFront, AWS WAF and the pricing plan: CI will be refused until you apply them.
+CI never applies the bootstrap, so you do, after any change to its `.tf` files. This includes the first deploy after moving from ECS and RDS (the CI roles' permissions changed from ECS and ECR to Lambda) and the first deploy with CloudFront and AWS WAF: CI will be refused until you apply them.
 
 ```bash
 terraform -chdir=infra/bootstrap plan
@@ -111,7 +109,7 @@ The access keys and GitHub settings stay as they are.
 
 A change to the distribution or its web ACL waits for CloudFront to deploy it everywhere, a few minutes. The Deploy workflow's `/health` check goes through CloudFront, so it runs after that.
 
-**Rate limits:** a client over a limit gets `429` for the rest of the 5 minutes. The limits are `rate_limit_all` (1,000 requests) and `rate_limit_create` (20 `POST`s to `/api/*`) in `infra/app/variables.tf`; change them in `terraform.tfvars` or the defaults. Rate-limit hits show in the web ACL's sampled requests in the AWS WAF console (region us-east-1).
+**Rate limits:** off for practice, on at full scale (`rate_limiting` in `infra/app/variables.tf`). To try them, put `rate_limiting = true` in `infra/app/terraform.tfvars` and run `release.sh`; set it back afterwards. A client over a limit gets `429` for the rest of the 5 minutes. The limits are `rate_limit_all` (1,000 requests) and `rate_limit_create` (20 `POST`s to `/api/*`) in `infra/app/variables.tf`; change them in `terraform.tfvars` or the defaults. Rate-limit hits show in the web ACL's sampled requests in the AWS WAF console (region us-east-1).
 
 **Take down a link:** delete it from the table, then clear CloudFront's copy of the redirect (it keeps it for up to a day). Browsers may keep their own copy for as long, and an invalidation can't reach it.
 
@@ -148,7 +146,7 @@ terraform -chdir=infra/app destroy -var app_version=none -var package_hash=none
 terraform -chdir=infra/foundation destroy
 ```
 
-Destroying the app takes several minutes, because CloudFront disables and then deletes the distribution. Terraform cancels the pricing plan first (a Free plan ends at once), since CloudFront refuses to delete a distribution that is on a plan.
+Destroying the app takes several minutes, because CloudFront disables and then deletes the distribution.
 
 If the table has deletion protection on, set `table_deletion_protection = false` in `infra/foundation/terraform.tfvars` and apply first. Destroying the table deletes the links, and its point-in-time backups with them.
 
@@ -166,8 +164,8 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's Free flat-rate plan covers the distribution and AWS WAF (rate limits included) for $0, up to 1 million requests and 100 GB a month. Without the plan (`flat_rate_plan = false`), WAF is about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
-- **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026). The largest flat-rate allowance, 6 billion requests a month, is below the roughly 30 billion here, so there is no flat rate.
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
+- **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
   - **Origin Shield:** $0.009 per 10,000 requests in Europe, about $2,700/month if 10% of requests reach it.
