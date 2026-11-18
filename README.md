@@ -30,7 +30,7 @@ flowchart LR
     service -->|"GetItem"| urls
 ```
 
-- **Deployed:** CloudFront is the public address. It answers repeated redirects from its cache and passes the rest to the function, which only it can call ([ADR 0007](docs/decisions/0007-cdn-cloudfront.md)). Nothing is paid for while idle. Locally it's one Node process (`src/server.ts`) and DynamoDB Local.
+- **Deployed:** CloudFront's `*.cloudfront.net` address is the public address. It answers repeated redirects from its cache and passes the rest to the function, which only it can call ([ADR 0007](docs/decisions/0007-cdn-cloudfront.md)). There is no server to keep running, and nothing is paid for while idle. Locally it's one Node process (`src/server.ts`) and DynamoDB Local.
 - **Create:** a custom alias is written as the code. Otherwise `codeGenerator` makes a random code and writes it. The write only succeeds if the code is free: a taken alias returns `409`; a taken generated code is replaced by a new one, up to 5 times.
 - **Resolve:** the table is read by its key `code`, and the app answers with a `302` redirect, or `404`. A code that isn't found is read once more, strongly consistent, so a new link never answers `404`.
 
@@ -54,7 +54,7 @@ What protects the app and its deployment, and what isn't covered yet: [`docs/sec
 
 ## API
 
-- `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `shortUrl` uses the address the request was sent to. `400` on invalid input, `409` if the alias is taken. On AWS, also send `x-amz-content-sha256`: the body's SHA-256 in hex (see the example).
+- `POST /api/urls` with `{ "url": "https://...", "alias": "optional-alias" }` returns `201 { code, shortUrl, longUrl }`. `shortUrl` uses the address the request was sent to. `400` on invalid input, `409` if the alias is taken. On AWS the request must carry `x-amz-content-sha256`, the hex SHA-256 of the body (the function URL can't accept an unsigned body).
 - `GET /:code` redirects (302) to the original URL, or `404`. CloudFront keeps a redirect for a day.
 - `GET /health`
 - `429` from any route: one IP sent too many requests in 5 minutes (at full scale; [limits](infra/README.md#deploy)).

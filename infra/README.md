@@ -81,7 +81,7 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
    terraform -chdir=infra/foundation apply
    ```
 
-6. **Create the function and the CDN from your machine**, because CI only updates what exists. The apply waits 5 to 15 minutes for CloudFront; that's normal.
+6. **Create the function and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
 
    ```bash
    infra/scripts/release.sh # yes
@@ -94,7 +94,7 @@ If a role is refused a `lambda:` or `logs:` action, add it in `bootstrap/deploy-
 
 ## Change the bootstrap
 
-CI never applies the bootstrap, so apply it yourself after any change to its `.tf` files, including the one that added CloudFront. CI is refused until you do.
+CI never applies the bootstrap, so you do, after any change to its `.tf` files. This includes the first deploy after moving from ECS and RDS (the CI roles' permissions changed from ECS and ECR to Lambda) and the first deploy with CloudFront and AWS WAF: CI will be refused until you apply them.
 
 ```bash
 terraform -chdir=infra/bootstrap plan
@@ -164,7 +164,7 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $0. Lambda, DynamoDB and the function URL bill per request, and CloudFront's free tier covers 10 million requests and 1 TB a month. With `rate_limiting = true`, WAF adds about $7 a month.
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
 - **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
