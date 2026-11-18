@@ -28,7 +28,7 @@ resource "aws_iam_user_policy" "plan_assume_role" {
 }
 
 # Read-only, enough to plan infra/app. It can't write, so CI plans with -lock=false. Any branch
-# can use it, so it is denied every secret.
+# can use it, so it is denied every secret (KMS decryption only outside Lambda, see below).
 resource "aws_iam_role_policy" "plan" {
   name = "plan-read-only"
   role = aws_iam_role.plan.id
@@ -52,9 +52,17 @@ resource "aws_iam_role_policy" "plan" {
         Effect = "Deny"
         Action = [
           "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath",
-          "ssm:GetParameterHistory", "kms:Decrypt", "secretsmanager:GetSecretValue",
+          "ssm:GetParameterHistory", "secretsmanager:GetSecretValue",
         ]
         Resource = "*"
+      },
+      # Lambda decrypts the function's environment variables for the caller, and the plan needs
+      # them to plan correctly. So environment variables must never hold secrets.
+      {
+        Effect    = "Deny"
+        Action    = "kms:Decrypt"
+        Resource  = "*"
+        Condition = { StringNotEquals = { "kms:ViaService" = "lambda.${var.region}.amazonaws.com" } }
       },
     ], local.deny_statements)
   })
