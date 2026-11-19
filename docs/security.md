@@ -32,6 +32,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 - **The web bucket is private.** It blocks public access, and its policy lets only this distribution read it (`infra/app/web.tf`).
 - **Only CloudFront can call the function.** The function URL requires signed calls, and only this distribution may make them (`infra/app/main.tf`, `cdn.tf`). So the app can trust the `X-Forwarded-Host` that CloudFront sets.
+- **Security headers on every response.** CloudFront adds AWS's managed security headers policy, so browsers get HSTS, `X-Content-Type-Options: nosniff`, frame protection and a `Referrer-Policy` (`infra/app/cdn.tf`). There is no Content-Security-Policy yet.
 - **Rate limits per IP, at full scale** (`rate_limiting`, off for practice). AWS WAF answers `429` after 1,000 requests or 20 link creations in 5 minutes (`infra/app/waf.tf`). A flood from many IPs still gets through; CloudFront's DDoS protection and the cache absorb it.
 - **Encrypted connections.** Clients reach CloudFront over HTTPS (`/api/*` refuses plain HTTP), CloudFront reaches the function URL over HTTPS, and the function reaches DynamoDB over HTTPS.
 - **Encrypted storage.** The table is encrypted at rest (DynamoDB always does this, with an AWS-owned key). The Terraform state bucket is encrypted (SSE-S3), versioned, blocks public access and refuses non-TLS requests.
