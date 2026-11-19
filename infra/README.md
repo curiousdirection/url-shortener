@@ -16,7 +16,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
 | `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
-| `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
+| `foundation/` | The DynamoDB table, the function's IAM role and the CloudWatch alarms | You, from your machine |
 | `app/` | The Lambda function, its function URL, its log group, the web page's S3 bucket, the CloudFront distribution, its access logs (not at full scale) and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 All three states are in the S3 bucket.
@@ -81,10 +81,16 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
    unset key
    ```
 
-5. **Apply the foundation.** Read the plan first. It takes a few seconds.
+5. **Apply the foundation.** Put the address the alarms go to in `infra/foundation/terraform.tfvars` (gitignored) as `alarm_email = "..."`. Then apply, reading the plan first. It takes a few seconds.
 
    ```bash
    terraform -chdir=infra/foundation apply
+   ```
+
+   AWS then emails that address a link (subject "AWS Notification - Subscription Confirmation"): click it within 48 hours, or no alarm is delivered. If it expired, `terraform -chdir=infra/foundation apply -replace=aws_sns_topic_subscription.alarm_email` sends a new one. To see an alarm email arrive, force one into alarm; it goes back to OK, with a second email, within a few minutes:
+
+   ```bash
+   aws cloudwatch set-alarm-state --alarm-name url-shortener-lambda-throttles --state-value ALARM --state-reason test --region eu-north-1
    ```
 
 6. **Create the function, the bucket and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
@@ -188,6 +194,7 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
 - **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. The web bucket and the invalidations on each release (the first 1,000 paths a month are free) cost about $0. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
+- **Alarms**, at any scale: about $0. They use 9 alarm metrics, and the first 10 are free (otherwise $0.10 per metric a month, $0.90); the first 1,000 alarm emails a month are free.
 - **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
