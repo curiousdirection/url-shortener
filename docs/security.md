@@ -19,7 +19,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 - **No credentials in the code.** The function gets short-lived credentials from its role. The table name is its only setting.
 - **No overwrites.** A link is written only if its code is free (a conditional write), so an existing link can't be replaced by creating another with the same code or alias.
 - **Random codes.** Codes come from `node:crypto`, so they can't be guessed from earlier ones.
-- **Nothing in the logs identifies a visitor.** The app doesn't log requests. Lambda's own per-request lines hold only ids and timings. CloudFront's access logs (`access_logs`, off at full scale) hold each request's time, path, status, edge location and timings, but no IP address or anything worked out from one (such as country or network), and no user agent, referrer, query string or cookie (`infra/app/access-logs.tf`). They are deleted after 7 days.
+- **Nothing in the logs identifies a visitor.** The app doesn't log requests. Lambda's own per-request lines hold only ids and timings. CloudFront's access logs (`access_logs`, off at full scale) hold each request's time, path, status, edge location and timings. They are deleted after 7 days.
 
 ### Supply chain
 
