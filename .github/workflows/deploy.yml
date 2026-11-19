@@ -70,7 +70,6 @@ jobs:
           access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
 
-      # Ends the deploy early, changing nothing (the run stays green), if the app is torn down or nothing in it changed.
       - name: Skip if torn down or unchanged
         run: infra/scripts/deploy-skip.sh app
 
@@ -110,7 +109,6 @@ jobs:
         if: inputs.ref != ''
         run: infra/scripts/check-on-main.sh
 
-      # Built before signing in, like the zip above.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
