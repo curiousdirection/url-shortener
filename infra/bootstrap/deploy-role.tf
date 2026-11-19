@@ -52,12 +52,13 @@ resource "aws_iam_role_policy" "deploy" {
       },
       { Effect = "Allow", Action = "s3:GetObject", Resource = local.foundation_state },
 
-      # The one function: read everything Terraform refreshes, and change its code, settings, URL settings, invoke permissions and tags.
+      # The one function: read everything Terraform refreshes, and change its code, settings, concurrency cap, URL settings, invoke permissions and tags.
       {
         Effect = "Allow"
         Action = [
           "lambda:Get*", "lambda:List*",
           "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
+          "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency",
           "lambda:UpdateFunctionUrlConfig", "lambda:AddPermission", "lambda:RemovePermission",
           "lambda:TagResource", "lambda:UntagResource",
         ]
