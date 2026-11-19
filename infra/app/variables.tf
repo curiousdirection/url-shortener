@@ -91,8 +91,9 @@ variable "system_log_level" {
   }
 }
 
-# 1024 because Lambda gives CPU in proportion to memory.
-# At 256 MB cold requests were about twice as slow, at about the same cost per request.
+# 1024 because Lambda gives CPU in proportion to memory, and the first request after a cold start is mostly CPU work (setting up the AWS SDK and the TLS connection to DynamoDB).
+# Measured on cold starts in November 2026: that request took about 480 ms at 256 MB (3 cold starts) and about 130 ms at 1024 MB (11).
+# Init took about 270 ms at both sizes, so more memory doesn't shorten it.
 variable "memory_size" {
   description = "MB of memory for the function."
   type        = number
