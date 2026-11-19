@@ -1,12 +1,13 @@
 # Deploying to AWS
 
-Runs the app as one [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) function with a function URL, behind an [Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Introduction.html) distribution, and keeps the links in a DynamoDB table. Why: [ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md) and [ADR 0007](../docs/decisions/0007-cdn-cloudfront.md). Practice uses the defaults in the `variables.tf` files; the `full-scale.tfvars.example` files show full-scale settings (reference only).
+Runs the app and its web page. The app is one [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) function with a function URL, behind an [Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Introduction.html) distribution, and keeps the links in a DynamoDB table. The page is files in an S3 bucket behind the same distribution. Why: [ADR 0006](../docs/decisions/0006-move-to-lambda-and-dynamodb.md), [ADR 0007](../docs/decisions/0007-cdn-cloudfront.md) and [ADR 0009](../docs/decisions/0009-frontend-on-s3.md). Practice uses the defaults in the `variables.tf` files; the `full-scale.tfvars.example` files show full-scale settings (reference only).
 
 ```
 Internet -> CloudFront (*.cloudfront.net; AWS WAF rate limits at full scale) -> function URL (signed) -> Lambda function -> DynamoDB table
+                                                    \-> S3 bucket (signed): the web page
 ```
 
-CloudFront is the only way in: the function URL refuses unsigned calls.
+CloudFront is the only way in: the function URL and the bucket refuse unsigned calls.
 
 A push to `main` that changes the app is deployed by GitHub Actions. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md).
 
@@ -16,7 +17,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 | --- | --- | --- |
 | `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
 | `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
-| `app/` | The Lambda function, its function URL, its log group, the CloudFront distribution, its access logs (not at full scale) and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
+| `app/` | The Lambda function, its function URL, its log group, the web page's S3 bucket, the CloudFront distribution, its access logs (not at full scale) and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 All three states are in the S3 bucket.
 
@@ -81,16 +82,19 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
    terraform -chdir=infra/foundation apply
    ```
 
-6. **Create the function and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
+6. **Create the function, the bucket and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
 
    ```bash
    infra/scripts/release.sh # yes
    curl $(terraform -chdir=infra/app output -raw url)/health   # {"status":"ok"}
+   curl -i $(terraform -chdir=infra/app output -raw url)/      # text/html, with <meta name="release">
    ```
+
+   `release.sh` also uploads the web page. If `/` returns the function's `404` JSON, see "`/` may not reach the bucket" in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
 
 7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that CI can sign in.
 
-If a role is refused a `lambda:` or `logs:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
+If a role is refused a `lambda:`, `logs:` or `s3:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
 
 ## Change the bootstrap
 
@@ -106,6 +110,8 @@ The access keys and GitHub settings stay as they are.
 ## Deploy
 
 **App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
+
+**Web page changes** (`web/`): merge to `main`. After the app deploy, the Deploy workflow's `web` job builds the page, uploads it with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
 
 A change to CloudFront takes a few minutes to reach every location; the Deploy workflow's `/health` check runs after that.
 
@@ -159,7 +165,7 @@ terraform -chdir=infra/app destroy -var app_version=none -var package_hash=none
 terraform -chdir=infra/foundation destroy
 ```
 
-Destroying the app takes several minutes, because CloudFront disables and then deletes the distribution.
+Destroying the app takes several minutes, because CloudFront disables and then deletes the distribution. It also empties and deletes the web bucket, which `force_destroy` allows because the page can be rebuilt.
 
 If the table has deletion protection on, set `table_deletion_protection = false` in `infra/foundation/terraform.tfvars` and apply first. Destroying the table deletes the links, and its point-in-time backups with them.
 
@@ -177,7 +183,7 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. The web bucket and the invalidations on each release (the first 1,000 paths a month are free) cost about $0. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
 - **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.

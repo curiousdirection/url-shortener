@@ -8,6 +8,7 @@ Node + TypeScript + Hono, on AWS Lambda and DynamoDB. A short code is 7 random b
 flowchart LR
     client([Client])
     cdn["CloudFront<br/>caches redirects; rate limits (AWS WAF) at full scale"]
+    web[("S3<br/>the web page")]
 
     subgraph lambda["Lambda function (function URL, HTTPS)"]
         routes["app.ts<br/>routes + zod validation"]
@@ -21,6 +22,8 @@ flowchart LR
         urls[("urls<br/>code PK, long_url")]
     end
 
+    client -->|"GET /"| cdn
+    cdn -->|"signed"| web
     client -->|"POST /api/urls"| cdn
     client -->|"GET /:code"| cdn
     cdn -->|"signed call; only on a cache miss for GET"| routes
@@ -30,7 +33,7 @@ flowchart LR
     service -->|"GetItem"| urls
 ```
 
-- **Deployed:** CloudFront's `*.cloudfront.net` address is the public address. It answers repeated redirects from its cache and passes the rest to the function, which only it can call ([ADR 0007](docs/decisions/0007-cdn-cloudfront.md)). There is no server to keep running, and nothing is paid for while idle. Locally it's one Node process (`src/server.ts`) and DynamoDB Local.
+- **Deployed:** CloudFront's `*.cloudfront.net` address is the public address, and it serves the web page from S3 ([ADR 0009](docs/decisions/0009-frontend-on-s3.md)). It answers repeated redirects from its cache and passes the rest to the function, which only it can call ([ADR 0007](docs/decisions/0007-cdn-cloudfront.md)). There is no server to keep running, and nothing is paid for while idle. Locally it's one Node process (`src/server.ts`) and DynamoDB Local.
 - **Create:** a custom alias is written as the code. Otherwise `codeGenerator` makes a random code and writes it. The write only succeeds if the code is free: a taken alias returns `409`; a taken generated code is replaced by a new one, up to 5 times.
 - **Resolve:** the table is read by its key `code`, and the app answers with a `302` redirect, or `404`. A code that isn't found is read once more, strongly consistent, so a new link never answers `404`.
 
@@ -46,6 +49,8 @@ npm run db:setup
 npm run dev
 ```
 
+For the web page, run `npm run web:dev` as well and open http://localhost:5173. It sends API calls and short links to the server on port 3000.
+
 ## Deploy
 
 [`infra/`](infra/README.md) runs the app on AWS as a Lambda function with a function URL behind CloudFront, and the links in DynamoDB. A push to `main` that changes the app is tested, zipped and deployed by GitHub Actions (`.github/workflows/ci.yml`, then `deploy.yml`). The one-time setup, the manual first run and rollback are in [`infra/README.md`](infra/README.md).
@@ -59,7 +64,7 @@ What protects the app and its deployment, and what isn't covered yet: [`docs/sec
 - `GET /health`
 - `429` from any route: one IP sent too many requests in 5 minutes (at full scale; [limits](infra/README.md#deploy)).
 
-Example:
+The web page at `/` does this for you. From the command line:
 
 ```bash
 body='{"url": "https://example.com/some/very/long/path", "alias": "my-link"}'
