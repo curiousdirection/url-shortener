@@ -1,5 +1,4 @@
-# The Terraform checks: formatting and validate for all three
-# stacks, and the app plan with the read-only plan role.
+# The Terraform checks: formatting and validate for all three stacks, and the app plan with the read-only plan role.
 # Not run on its own: ci.yml calls it on every push.
 name: Terraform
 

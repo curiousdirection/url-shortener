@@ -1,5 +1,4 @@
-# Table settings for the full-scale load
-# ("Assumptions" in the root README).
+# Table settings for the full-scale load ("Assumptions" in the root README).
 # Reference only: not meant to be applied.
 # What they cost: "Cost" in infra/README.md.
 # The table is on-demand, so it needs no sizing.

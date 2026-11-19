@@ -1,8 +1,7 @@
 import { CreateTableCommand, DynamoDBClient, ResourceInUseException } from "@aws-sdk/client-dynamodb";
 
 // Creates the table in DynamoDB Local (npm run db:setup).
-// Same key and billing mode as the real table in
-// infra/foundation/dynamodb.tf.
+// Same key and billing mode as the real table in infra/foundation/dynamodb.tf.
 // Does nothing if it already exists.
 export async function createTable(db: DynamoDBClient, tableName: string): Promise<void> {
   try {

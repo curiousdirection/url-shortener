@@ -1,6 +1,5 @@
 # Deploys the app: build the zip, apply infra/app, check /health.
-# Starts when CI has passed on main; run it by hand with ref to
-# roll back.
+# Starts when CI has passed on main; run it by hand with ref to roll back.
 name: Deploy
 
 on:
@@ -26,12 +25,10 @@ defaults:
 
 jobs:
   release:
-    # After CI passed on main (not a failed or cancelled run), or
-    # by hand.
+    # After CI passed on main (not a failed or cancelled run), or by hand.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     # One deploy at a time.
-    # A new one waits rather than cancelling a running apply; a
-    # newer one replaces one that is still waiting.
+    # A new one waits rather than cancelling a running apply; a newer one replaces one that is still waiting.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -51,16 +48,14 @@ jobs:
           ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }} # the commit CI tested, or the one to roll back to
           fetch-depth: 0 # to compare with the deployed commit
 
-      # A rollback may only deploy code that was merged, not a
-      # commit from another branch.
+      # A rollback may only deploy code that was merged, not a commit from another branch.
       - name: Check the rollback commit is on main
         if: inputs.ref != ''
         run: |
           git merge-base --is-ancestor HEAD origin/main ||
             { echo "::error::$ROLLBACK_TO is not in main's history"; exit 1; }
 
-      # The zip is built before signing in to AWS, so the npm
-      # packages never run with credentials.
+      # The zip is built before signing in to AWS, so the npm packages never run with credentials.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
@@ -76,10 +71,8 @@ jobs:
           access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
 
-      # The two steps below end the deploy early, changing
-      # nothing (the run stays green).
-      # Each sets SKIP, and every later step only runs while SKIP
-      # is unset.
+      # The two steps below end the deploy early, changing nothing (the run stays green).
+      # Each sets SKIP, and every later step only runs while SKIP is unset.
 
       # CI never recreates a torn-down stack; release.sh does.
       - name: Skip if the app is torn down
@@ -104,8 +97,8 @@ jobs:
             echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Apply exactly the saved plan. -lock-timeout waits for a
-      # local release.sh.
+      # Apply exactly the saved plan.
+      # -lock-timeout waits for a local release.sh.
       - name: Plan and apply
         id: apply
         if: env.SKIP == ''

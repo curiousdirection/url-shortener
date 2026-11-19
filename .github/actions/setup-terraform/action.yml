@@ -1,9 +1,6 @@
 # Installs the Terraform version in .terraform-version.
-# With `role`, it also signs in to AWS with the IAM user's access
-# key, assumes that role and runs `terraform init` for infra/app,
-# using the job's AWS_REGION and TF_STATE_BUCKET.
-# The key is an input because a composite action can't read
-# secrets.
+# With `role`, it also signs in to AWS with the IAM user's access key, assumes that role and runs `terraform init` for infra/app, using the job's AWS_REGION and TF_STATE_BUCKET.
+# The key is an input because a composite action can't read secrets.
 # Run actions/checkout first.
 # Used by terraform.yml and deploy.yml.
 name: Set up Terraform
@@ -39,8 +36,7 @@ runs:
         aws-access-key-id: ${{ inputs.access-key-id }}
         aws-secret-access-key: ${{ inputs.secret-access-key }}
         role-to-assume: ${{ inputs.role }}
-        # Otherwise the action tags the session, and the trust
-        # would need sts:TagSession.
+        # Otherwise the action tags the session, and the trust would need sts:TagSession.
         role-skip-session-tagging: true
         aws-region: ${{ env.AWS_REGION }}
     - if: inputs.role != ''

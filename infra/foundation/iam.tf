@@ -1,10 +1,8 @@
 # The role the Lambda function runs as.
-# It is here, not in the app stack, so the CI deploy role never
-# has to create or change roles.
+# It is here, not in the app stack, so the CI deploy role never has to create or change roles.
 # It only passes this one to Lambda.
 #
-# The name is fixed (not `name_prefix`) so that the deploy role's
-# PassRole rule can name it exactly.
+# The name is fixed (not `name_prefix`) so that the deploy role's PassRole rule can name it exactly.
 
 resource "aws_iam_role" "lambda" {
   name = "${var.name}-lambda"
@@ -18,10 +16,8 @@ resource "aws_iam_role" "lambda" {
   })
 }
 
-# All the function may do: read and write items in the one table,
-# and write its own logs.
-# The log group is made by the app stack; it is named here
-# because the foundation is applied first.
+# All the function may do: read and write items in the one table, and write its own logs.
+# The log group is made by the app stack; it is named here because the foundation is applied first.
 resource "aws_iam_role_policy" "lambda" {
   role = aws_iam_role.lambda.name
   policy = jsonencode({

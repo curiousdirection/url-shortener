@@ -1,5 +1,4 @@
-# App settings for the full-scale load
-# ("Assumptions" in the root README).
+# App settings for the full-scale load ("Assumptions" in the root README).
 # Reference only: not meant to be applied.
 # What they cost: "Cost" in infra/README.md.
 # Table settings: infra/foundation/full-scale.tfvars.example

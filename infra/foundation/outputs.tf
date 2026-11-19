@@ -1,5 +1,4 @@
-# Values the app stack reads (with terraform_remote_state) to
-# wire the function to this foundation.
+# Values the app stack reads (with terraform_remote_state) to wire the function to this foundation.
 # They are not secret.
 # You can see them any time with `terraform output`.
 
