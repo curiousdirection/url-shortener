@@ -1,5 +1,6 @@
-# Checks every push to every branch: tests and build (test.yml),
-# Terraform checks and the app plan (terraform.yml).
+# Checks every push to every branch: comment width, tests and
+# build (test.yml), Terraform checks and the app plan
+# (terraform.yml).
 # When CI passes on main, deploy.yml starts.
 #
 # All workflows pin actions to commit SHAs.

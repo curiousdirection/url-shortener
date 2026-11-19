@@ -16,8 +16,8 @@ terraform {
     encrypt      = true
   }
 
-  # The plugin ("provider") Terraform downloads on `terraform
-  # init`.
+  # The plugin ("provider") Terraform downloads on
+  # `terraform init`.
   # `~> 6.0` means any 6.x version, but not 7.0.
   # The exact version used is pinned in .terraform.lock.hcl.
   required_providers {

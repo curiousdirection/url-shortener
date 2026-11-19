@@ -65,7 +65,7 @@ variable "rate_limit_create" {
   }
 }
 
-# Off for practice: WAF costs about $7 a month even when idle.
+# Off for practice. What WAF costs: "Cost" in infra/README.md.
 variable "rate_limiting" {
   description = "Rate limits (AWS WAF)."
   type        = bool

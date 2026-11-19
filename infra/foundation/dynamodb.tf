@@ -29,7 +29,7 @@ resource "aws_dynamodb_table" "urls" {
     enabled = var.table_point_in_time_recovery
   }
 
-  # When true, AWS refuses to delete the table (even `terraform
-  # destroy`) until you turn it off.
+  # When true, AWS refuses to delete the table, even with
+  # `terraform destroy`, until you turn it off.
   deletion_protection_enabled = var.table_deletion_protection
 }

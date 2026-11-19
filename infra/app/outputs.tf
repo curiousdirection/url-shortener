@@ -1,6 +1,6 @@
 # Values printed at the end of `terraform apply`.
-# Show them again any time with `terraform output` (or `terraform
-# output -raw url` for just one, without quotes).
+# Show them again any time with `terraform output`, or with
+# `terraform output -raw url` for just one, without quotes.
 
 # The public address, e.g. https://d111111abcdef8.cloudfront.net
 # (no trailing slash).
