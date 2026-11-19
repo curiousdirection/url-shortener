@@ -1,4 +1,4 @@
-# CloudFront's access logs, only when access_logs is true.
+# CloudFront's access logs, only when cdn_access_logs is true.
 # One JSON line per request in CloudWatch Logs.
 # How to read them: "Access logs" under "Deploy" in infra/README.md.
 #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/standard-logging.html
@@ -8,7 +8,7 @@
 data "aws_caller_identity" "current" {}
 
 resource "aws_cloudwatch_log_group" "access" {
-  count    = var.access_logs ? 1 : 0
+  count    = var.cdn_access_logs ? 1 : 0
   provider = aws.us_east_1
   # Letters, digits, - and _ only: the log delivery refuses other characters, so no slashes as in /url-shortener/app.
   name              = "${var.name}-cdn-access"
@@ -17,7 +17,7 @@ resource "aws_cloudwatch_log_group" "access" {
 
 # Lets the log delivery service write to the group, and only for this account.
 resource "aws_cloudwatch_log_resource_policy" "access" {
-  count       = var.access_logs ? 1 : 0
+  count       = var.cdn_access_logs ? 1 : 0
   provider    = aws.us_east_1
   policy_name = "${var.name}-cdn-access"
   policy_document = jsonencode({
@@ -36,7 +36,7 @@ resource "aws_cloudwatch_log_resource_policy" "access" {
 }
 
 resource "aws_cloudwatch_log_delivery_source" "access" {
-  count        = var.access_logs ? 1 : 0
+  count        = var.cdn_access_logs ? 1 : 0
   provider     = aws.us_east_1
   name         = "${var.name}-cdn"
   log_type     = "ACCESS_LOGS"
@@ -45,7 +45,7 @@ resource "aws_cloudwatch_log_delivery_source" "access" {
 
 # The format can't be changed later; a new one means a new destination.
 resource "aws_cloudwatch_log_delivery_destination" "access" {
-  count         = var.access_logs ? 1 : 0
+  count         = var.cdn_access_logs ? 1 : 0
   provider      = aws.us_east_1
   name          = "${var.name}-cdn-access"
   output_format = "json"
@@ -56,7 +56,7 @@ resource "aws_cloudwatch_log_delivery_destination" "access" {
 }
 
 resource "aws_cloudwatch_log_delivery" "access" {
-  count                    = var.access_logs ? 1 : 0
+  count                    = var.cdn_access_logs ? 1 : 0
   provider                 = aws.us_east_1
   delivery_source_name     = aws_cloudwatch_log_delivery_source.access[0].name
   delivery_destination_arn = aws_cloudwatch_log_delivery_destination.access[0].arn

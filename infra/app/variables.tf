@@ -73,7 +73,7 @@ variable "rate_limiting" {
 }
 
 # Off at full scale, where a line for each of about 30 billion requests a month would cost thousands in CloudWatch ("Cost" in infra/README.md).
-variable "access_logs" {
+variable "cdn_access_logs" {
   description = "CloudFront's access logs (access-logs.tf): a line for each request, with its path, status and timings."
   type        = bool
   default     = true

@@ -5,7 +5,7 @@
 system_log_level = "WARN"
 
 # CloudFront's access logs (see the variable).
-access_logs = false
+cdn_access_logs = false
 
 # Rate limits by IP (AWS WAF).
 rate_limiting = true
