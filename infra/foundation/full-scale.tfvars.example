@@ -1,5 +1,0 @@
-# Full-scale table settings for the load in "Assumptions" (root README.md). Reference only, not
-# meant to be applied; see "Cost" in ../README.md. The function's memory is in
-# ../app/full-scale.tfvars.example. The table is on-demand either way, so it needs no sizing.
-table_point_in_time_recovery = true
-table_deletion_protection    = true
