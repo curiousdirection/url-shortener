@@ -11,6 +11,11 @@ output "distribution_id" {
   value = aws_cloudfront_distribution.app.id
 }
 
+# The bucket the web page is uploaded to (infra/scripts/release-web.sh).
+output "web_bucket" {
+  value = aws_s3_bucket.web.bucket
+}
+
 # The function's own address.
 # Only CloudFront can call it; use `url`.
 output "function_url" {

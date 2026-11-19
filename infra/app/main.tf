@@ -1,5 +1,5 @@
 # The app: one Lambda function (a zip of the bundled code), its function URL and its log group.
-# CloudFront in front of it: cdn.tf.
+# CloudFront in front of it: cdn.tf. The web page's bucket: web.tf.
 #
 # The table and the function's role come from the foundation stack (see the data source below).
 

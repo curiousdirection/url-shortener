@@ -18,6 +18,9 @@ locals {
   # The CDN's function, made in infra/app/cdn.tf with this exact name.
   cdn_function_arn = "${local.cloudfront_arn}:function/${var.name}-forwarded-host"
 
+  # The web page's bucket, made in infra/app/web.tf with this exact name.
+  web_bucket_arn = "arn:aws:s3:::${var.name}-web-${local.account_id}"
+
   cdn_web_acl_arn = "arn:aws:wafv2:us-east-1:${local.account_id}:global/webacl/${var.name}/*"
 
   # What Terraform reads to refresh the CDN, for both roles.
@@ -58,6 +61,15 @@ locals {
       Effect   = "Allow"
       Action   = ["wafv2:GetWebACL", "wafv2:ListTagsForResource"]
       Resource = local.cdn_web_acl_arn
+    },
+  ]
+
+  # What Terraform reads to refresh the web bucket and its settings, for both roles.
+  web_bucket_read_statements = [
+    {
+      Effect   = "Allow"
+      Action   = ["s3:ListBucket", "s3:GetBucket*", "s3:Get*Configuration"]
+      Resource = local.web_bucket_arn
     },
   ]
 

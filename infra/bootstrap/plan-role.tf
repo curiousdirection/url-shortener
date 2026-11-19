@@ -65,7 +65,7 @@ resource "aws_iam_role_policy" "plan" {
         Resource  = "*"
         Condition = { StringNotEquals = { "kms:ViaService" = "lambda.${var.region}.amazonaws.com" } }
       },
-      # The CDN and its access logs: see cloudfront_read_statements and access_log_read_statements in github.tf.
-    ], local.cloudfront_read_statements, local.access_log_read_statements, local.deny_statements)
+      # The CDN, its web bucket and its access logs: see cloudfront_read_statements, web_bucket_read_statements and access_log_read_statements in github.tf.
+    ], local.cloudfront_read_statements, local.web_bucket_read_statements, local.access_log_read_statements, local.deny_statements)
   })
 }
