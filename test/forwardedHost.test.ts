@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-// The CloudFront Function is plain JavaScript with no exports, so load it as text.
+// The CloudFront Function is plain JavaScript with no exports,
+// so load it as text.
 const source = readFileSync(new URL("../infra/app/functions/forwarded-host.js", import.meta.url), "utf8");
 const handler = new Function(`${source}\nreturn handler;`)() as (event: unknown) => {
   headers: Record<string, { value: string }>;

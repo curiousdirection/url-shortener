@@ -1,4 +1,5 @@
-# The plan role, used by CI (.github/workflows/terraform.yml) to plan infra/app on every push.
+# The plan role, used by CI (.github/workflows/terraform.yml) to
+# plan infra/app on every push.
 
 resource "aws_iam_role" "plan" {
   name = "github-plan-${var.name}"
@@ -13,7 +14,8 @@ resource "aws_iam_role" "plan" {
   })
 }
 
-# Its access key is a repository secret, so CI on any branch can use it.
+# Its access key is a repository secret, so CI on any branch can
+# use it.
 resource "aws_iam_user" "plan" {
   name = "github-plan-${var.name}"
 }
@@ -27,8 +29,10 @@ resource "aws_iam_user_policy" "plan_assume_role" {
   })
 }
 
-# Read-only, enough to plan infra/app. It can't write, so CI plans with -lock=false. Any branch
-# can use it, so it is denied every secret (KMS decryption only outside Lambda, see below).
+# Read-only, enough to plan infra/app.
+# It can't write, so CI plans with -lock=false.
+# Any branch can use it, so it is denied every secret (KMS
+# decryption only outside Lambda, see below).
 resource "aws_iam_role_policy" "plan" {
   name = "plan-read-only"
   role = aws_iam_role.plan.id
@@ -44,10 +48,12 @@ resource "aws_iam_role_policy" "plan" {
         ]
         Resource = "*"
       },
-      # The one function: everything Terraform reads when it refreshes it.
+      # The one function: everything Terraform reads when it
+      # refreshes it.
       { Effect = "Allow", Action = ["lambda:Get*", "lambda:List*"], Resource = local.function_arn },
-      # The state bucket uses SSE-S3, so denying kms:Decrypt doesn't block state reads. Moving
-      # the bucket to a KMS key would.
+      # The state bucket uses SSE-S3, so denying kms:Decrypt
+      # doesn't block state reads.
+      # Moving the bucket to a KMS key would.
       {
         Effect = "Deny"
         Action = [
@@ -56,8 +62,9 @@ resource "aws_iam_role_policy" "plan" {
         ]
         Resource = "*"
       },
-      # Lambda decrypts the function's environment variables for the caller, and the plan needs
-      # them to plan correctly. So environment variables must never hold secrets.
+      # Lambda decrypts the function's environment variables for
+      # the caller, and the plan needs them to plan correctly.
+      # So environment variables must never hold secrets.
       {
         Effect    = "Deny"
         Action    = "kms:Decrypt"

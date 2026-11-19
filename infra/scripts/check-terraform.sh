@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Checks the Terraform files the way CI does: formatting, then validate for each stack
-# (without reaching the state in S3). Usage: infra/scripts/check-terraform.sh
+# Checks the Terraform files the way CI does: formatting, then
+# validate for each stack (without reaching the state in S3).
+# Usage: infra/scripts/check-terraform.sh
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."

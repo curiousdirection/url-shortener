@@ -1,6 +1,9 @@
-# Inputs you can change. The defaults are the practice values. To override one, put it in
-# terraform.tfvars (gitignored) or pass `-var name=value`. The table settings are in
-# ../foundation/variables.tf. `state_bucket` has no default: you must set it (see below).
+# Inputs you can change.
+# The defaults are the practice values.
+# To override one, put it in terraform.tfvars (gitignored) or
+# pass `-var name=value`.
+# The table settings are in infra/foundation/variables.tf.
+# `state_bucket` has no default: you must set it (see below).
 
 variable "name" {
   description = "Prefix for resource names and tags. Must match the foundation stack."
@@ -62,14 +65,17 @@ variable "rate_limit_create" {
   }
 }
 
+# Off for practice. What WAF costs: "Cost" in infra/README.md.
 variable "rate_limiting" {
-  description = "Rate limits (AWS WAF). Off for practice: WAF costs about $7 a month even when idle."
+  description = "Rate limits (AWS WAF)."
   type        = bool
   default     = false
 }
 
+# WARN at full scale, where the START, END and REPORT lines would
+# cost thousands a month in CloudWatch.
 variable "system_log_level" {
-  description = "Lambda's own log lines: START, END and REPORT (with timings) for every request. INFO keeps them; WARN keeps only warnings and errors. WARN at full scale, where they'd cost thousands a month in CloudWatch."
+  description = "Lambda's own log lines: START, END and REPORT (with timings) for every request. INFO keeps them; WARN keeps only warnings and errors."
   type        = string
   default     = "INFO"
 
@@ -79,8 +85,11 @@ variable "system_log_level" {
   }
 }
 
+# 1024 because Lambda gives CPU in proportion to memory.
+# At 256 MB cold requests were about twice as slow, at about the
+# same cost per request.
 variable "memory_size" {
-  description = "MB of memory for the function. 1024 because Lambda gives CPU in proportion to memory: at 256 MB cold requests were about twice as slow, at about the same cost per request."
+  description = "MB of memory for the function."
   type        = number
   default     = 1024
 }

@@ -1,6 +1,8 @@
-# Full-scale function settings for the load in "Assumptions" (root README.md). Reference only,
-# not meant to be applied; see "Cost" in ../README.md. The table settings are in
-# ../foundation/full-scale.tfvars.example.
+# App settings for the full-scale load
+# ("Assumptions" in the root README).
+# Reference only: not meant to be applied.
+# What they cost: "Cost" in infra/README.md.
+# Table settings: infra/foundation/full-scale.tfvars.example
 system_log_level = "WARN"
 
 # Rate limits by IP (AWS WAF).

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Build the app zip and apply infra/app. For the first run and releases from your machine; CI
-# does the same on main. See "Deploy" in infra/README.md.
-# Usage: infra/scripts/release.sh   (needs AWS credentials, Node and the setup in that README)
+# Build the app zip and apply infra/app.
+# For the first run and releases from your machine; CI does the
+# same on main.
+# See "Deploy" in infra/README.md.
+# Usage: infra/scripts/release.sh
+# Needs AWS credentials, Node and the setup in that README.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
