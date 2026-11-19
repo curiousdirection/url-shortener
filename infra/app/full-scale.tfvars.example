@@ -1,0 +1,12 @@
+# App settings for the full-scale load
+# ("Assumptions" in the root README).
+# Reference only: not meant to be applied.
+# What they cost: "Cost" in infra/README.md.
+# Table settings: infra/foundation/full-scale.tfvars.example
+system_log_level = "WARN"
+
+# Rate limits by IP (AWS WAF).
+rate_limiting = true
+
+# Origin Shield (see the variable).
+origin_shield_region = "eu-west-2"
