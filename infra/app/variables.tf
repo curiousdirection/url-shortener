@@ -72,6 +72,13 @@ variable "rate_limiting" {
   default     = false
 }
 
+# Off at full scale, where a line for each of about 30 billion requests a month would cost thousands in CloudWatch ("Cost" in infra/README.md).
+variable "access_logs" {
+  description = "CloudFront's access logs (access-logs.tf): a line for each request, with its path, status and timings."
+  type        = bool
+  default     = true
+}
+
 # WARN at full scale, where the START, END and REPORT lines would cost thousands a month in CloudWatch.
 variable "system_log_level" {
   description = "Lambda's own log lines: START, END and REPORT (with timings) for every request. INFO keeps them; WARN keeps only warnings and errors."

@@ -16,7 +16,7 @@ A push to `main` that changes the app is deployed by GitHub Actions. Why it is b
 | --- | --- | --- |
 | `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
 | `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
-| `app/` | The Lambda function, its function URL, its log group, the CloudFront distribution and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
+| `app/` | The Lambda function, its function URL, its log group, the CloudFront distribution, its access logs (not at full scale) and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 All three states are in the S3 bucket.
 
@@ -111,6 +111,19 @@ A change to CloudFront takes a few minutes to reach every location; the Deploy w
 
 **Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
 
+**Access logs** (`access_logs`) are on for practice and off at full scale. Turning them on or off creates or deletes resources, which CI can't do: change the setting in `infra/app/terraform.tfvars` and run `release.sh`. A change can take up to 12 hours to reach CloudFront, so the first lines may be slow to appear.
+
+To read them, open CloudWatch > Logs Insights in us-east-1 (N. Virginia), choose the `url-shortener-cdn-access` log group and run, for example, the latest API requests with their timings:
+
+```
+fields `timestamp(ms)`, `cs-method`, `cs-uri-stem`, `sc-status`, `time-taken`, `origin-fbl`
+| filter `cs-uri-stem` like /^\/api\//
+| sort `timestamp(ms)` desc
+| limit 20
+```
+
+`time-taken` is the whole request as CloudFront saw it; `origin-fbl` is the part spent waiting for the function URL. To find one request, match `x-edge-request-id` to the `x-amz-cf-id` header of its response.
+
 **Take down a link:** delete it from the table, then clear CloudFront's copy:
 
 ```bash
@@ -164,10 +177,11 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
 - **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
   - **Origin Shield:** $0.009 per 10,000 requests in Europe, about $2,700/month if 10% of requests reach it.
+  - **Access logs** are off. On, they would cost about $5,000/month: about 10 TB of log lines (a guess of 330 bytes each) at $0.50 per GB, the first tier of [CloudWatch's vended logs](https://aws.amazon.com/cloudwatch/pricing/).
   - **Origin (Lambda, DynamoDB):** about $1.2k/month, assuming 90% of redirects come from the cache (a guess; [ADR 0007](../docs/decisions/0007-cdn-cloudfront.md)).
 - **Full scale, without a CDN**, for comparison: about $12,000/month, about twice the old ECS and RDS stack (about $6,200): Lambda requests ~$6,100 (about 30 billion a month), data transfer out ~$2,650, DynamoDB ~$2,300, Lambda run time ~$800.

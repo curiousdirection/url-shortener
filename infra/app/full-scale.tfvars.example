@@ -4,6 +4,9 @@
 # Table settings: infra/foundation/full-scale.tfvars.example
 system_log_level = "WARN"
 
+# CloudFront's access logs (see the variable).
+access_logs = false
+
 # Rate limits by IP (AWS WAF).
 rate_limiting = true
 
