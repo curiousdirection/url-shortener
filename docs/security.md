@@ -32,6 +32,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 - **The web bucket is private.** It blocks public access, and its policy lets only this distribution read it (`infra/app/web.tf`).
 - **Only CloudFront can call the function.** The function URL requires signed calls, and only this distribution may make them (`infra/app/main.tf`, `cdn.tf`). So the app can trust the `X-Forwarded-Host` that CloudFront sets.
+- **Security headers on every response.** CloudFront adds AWS's managed security headers policy, so browsers get HSTS, `X-Content-Type-Options: nosniff`, frame protection and a `Referrer-Policy` (`infra/app/cdn.tf`). There is no Content-Security-Policy yet.
 - **Rate limits per IP, at full scale** (`rate_limiting`, off for practice). AWS WAF answers `429` after 1,000 requests or 20 link creations in 5 minutes (`infra/app/waf.tf`). A flood from many IPs still gets through; CloudFront's DDoS protection and the cache absorb it.
 - **A cap on the function.** At most 10 copies run at once (`reserved_concurrency`, higher at full scale), so a flood of requests for codes that aren't cached can't run up Lambda and DynamoDB use without limit. Past the cap, every visitor whose request misses the cache gets an error (`infra/app/variables.tf`).
 - **Encrypted connections.** Clients reach CloudFront over HTTPS (`/api/*` refuses plain HTTP), CloudFront reaches the function URL over HTTPS, and the function reaches DynamoDB over HTTPS.

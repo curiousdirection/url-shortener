@@ -55,6 +55,12 @@ locals {
       ]
       Resource = "*"
     },
+    # AWS's ready-made response headers policy, which cdn.tf looks up by name.
+    {
+      Effect   = "Allow"
+      Action   = ["cloudfront:ListResponseHeadersPolicies", "cloudfront:GetResponseHeadersPolicy"]
+      Resource = "*"
+    },
     # The web ACL, in us-east-1.
     # WAF adds an id after the name, hence `*`.
     {
