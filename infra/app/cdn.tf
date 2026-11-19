@@ -53,7 +53,7 @@ resource "aws_cloudfront_distribution" "app" {
   web_acl_id      = var.rate_limiting ? aws_wafv2_web_acl.app[0].arn : null
 
   # What / shows.
-  # Check after the first release that CloudFront sends / to the web origin and not to the function (docs/decisions/0009-frontend-on-s3.md).
+  # CloudFront turns / into /index.html before it picks a behaviour, so / gets the /index.html behaviour below.
   default_root_object = "index.html"
 
   origin {

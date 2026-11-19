@@ -22,8 +22,6 @@ Creating a link needs a hand-made body hash for `x-amz-content-sha256` ([0007](0
 
 ## Consequences
 
-- **`/` may not reach the bucket.** The CloudFront docs don't say whether `/` is turned into `/index.html` before or after CloudFront picks the behaviour. If it is before, `/` is served from the bucket. If it is after, `/` matches the default behaviour and the function answers `404`. Check on the first release: `curl $url/` must return the HTML.
-- **Fallback, only if that check fails:** a viewer-request CloudFront Function on the default behaviour that sends `/` to the bucket (`cf.selectRequestOriginById`). It would run on every redirect. CloudFront Functions cost $0.10 per million invocations, so at about 30 billion requests a month that is about $3,000 a month. Not built.
 - **`assets` is a reserved alias,** because `/assets/*` can't reach the function.
 - **A public form makes abuse easier.** Creating a link no longer needs a hash by hand ([docs/security.md](../security.md)).
 - **CI can upload to the bucket and clear the cache, but not create or delete the bucket,** like the other resources, so the first release is run by hand.
@@ -34,7 +32,8 @@ Creating a link needs a hand-made body hash for `x-amz-content-sha256` ([0007](0
 - **A separate host** (another distribution or the bucket's own address): the API would need CORS, and the short link would not be on the same address.
 - **Short browser cache times on `index.html`:** a visitor could get an old page for minutes after a release, and the page's files change with it.
 - **A framework:** more to build and keep updated for a form.
+- **A CloudFront Function that sends `/` to the bucket:** not needed, because `/` reaches it through `default_root_object` (`infra/app/cdn.tf`), and it would run on every redirect: $0.10 per million, about $3,000 a month at about 30 billion requests.
 
 ## Revisit when
 
-The check of `/` fails, or the page grows past a form.
+The page grows past a form.

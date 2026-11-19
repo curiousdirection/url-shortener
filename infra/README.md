@@ -90,7 +90,7 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
    curl -i $(terraform -chdir=infra/app output -raw url)/      # text/html, with <meta name="release">
    ```
 
-   `release.sh` also uploads the web page. If `/` returns the function's `404` JSON, see "`/` may not reach the bucket" in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
+   `release.sh` also uploads the web page.
 
 7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that CI can sign in.
 
