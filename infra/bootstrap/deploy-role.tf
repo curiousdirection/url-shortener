@@ -1,4 +1,5 @@
 # The deploy role, used by .github/workflows/deploy.yml to apply infra/app.
+# Only the CodeBuild runner project (runner.tf) can assume it, and its deploy job gets the credentials from the project's service role.
 
 resource "aws_iam_role" "deploy" {
   name                 = "github-deploy-${var.name}"
@@ -8,23 +9,16 @@ resource "aws_iam_role" "deploy" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { AWS = aws_iam_user.deploy.arn }
+      Principal = { Service = "codebuild.amazonaws.com" }
       Action    = "sts:AssumeRole"
+      # Confused-deputy guard: only this project, in this account.
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = local.account_id
+          "aws:SourceArn"     = local.runner_project_arn
+        }
+      }
     }]
-  })
-}
-
-# Its access key is only given to the `production` environment, which only main can use.
-resource "aws_iam_user" "deploy" {
-  name = "github-deploy-${var.name}"
-}
-
-resource "aws_iam_user_policy" "deploy_assume_role" {
-  name = "assume-deploy-role"
-  user = aws_iam_user.deploy.name
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Resource = aws_iam_role.deploy.arn }]
   })
 }
 
@@ -33,6 +27,9 @@ locals {
   log_group_arn = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/${var.name}/app"
   # The function's role, made in infra/foundation/iam.tf with this exact name.
   lambda_role_arn = "arn:aws:iam::${local.account_id}:role/${var.name}-lambda"
+
+  # The runner project's build logs, in the log group that runner.tf makes with this exact name.
+  runner_log_group_arn = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/codebuild/${local.runner_name}"
 }
 
 # Only what `terraform apply` in infra/app needs.
@@ -84,6 +81,17 @@ resource "aws_iam_role_policy" "deploy" {
           "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource",
         ]
         Resource = [local.log_group_arn, "${local.log_group_arn}:*"]
+      },
+      # What the runner itself needs: writing its own build logs and getting GitHub's token from the connection.
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = [local.runner_log_group_arn, "${local.runner_log_group_arn}:*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["codeconnections:GetConnection", "codeconnections:GetConnectionToken", "codeconnections:UseConnection"]
+        Resource = aws_codeconnections_connection.github.arn
       },
       ], local.cloudfront_read_statements, local.web_bucket_read_statements, local.access_log_read_statements, [
       # CloudFront's access logs: update, not create or delete.

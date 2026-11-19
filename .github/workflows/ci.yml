@@ -1,4 +1,4 @@
-# Checks every push to every branch: tests and build (test.yml), Terraform checks and the app plan (terraform.yml).
+# Checks every push to every branch: tests and build (test.yml), Terraform checks (terraform.yml).
 # When CI passes on main, deploy.yml starts.
 #
 # All workflows pin actions to commit SHAs.
@@ -26,9 +26,6 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
 
-  # Terraform checks and the app plan (terraform.yml).
+  # Terraform formatting and validate (terraform.yml).
   terraform:
     uses: ./.github/workflows/terraform.yml
-    secrets:
-      AWS_PLAN_ACCESS_KEY_ID: ${{ secrets.AWS_PLAN_ACCESS_KEY_ID }}
-      AWS_PLAN_SECRET_ACCESS_KEY: ${{ secrets.AWS_PLAN_SECRET_ACCESS_KEY }}

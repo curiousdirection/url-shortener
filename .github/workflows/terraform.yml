@@ -1,14 +1,10 @@
-# The Terraform checks: formatting and validate for all three stacks, and the app plan with the read-only plan role.
+# The Terraform checks: formatting and validate for all three stacks.
+# They need no AWS credentials.
 # Not run on its own: ci.yml calls it on every push.
 name: Terraform
 
 on:
   workflow_call:
-    secrets:
-      AWS_PLAN_ACCESS_KEY_ID:
-        required: false
-      AWS_PLAN_SECRET_ACCESS_KEY:
-        required: false
 
 permissions:
   contents: read
@@ -27,27 +23,3 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-terraform
       - run: infra/scripts/check-terraform.sh
-
-  # What would this commit change in the app stack?
-  # Uses the read-only plan role.
-  plan:
-    if: vars.AWS_PLAN_ROLE_ARN != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-terraform
-        with:
-          role: ${{ vars.AWS_PLAN_ROLE_ARN }}
-          access-key-id: ${{ secrets.AWS_PLAN_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.AWS_PLAN_SECRET_ACCESS_KEY }}
-      - run: |
-          infra/scripts/plan-app.sh | tee plan.txt
-          { echo '### Terraform plan: app'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-

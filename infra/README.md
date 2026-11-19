@@ -9,13 +9,13 @@ Internet -> CloudFront (*.cloudfront.net; AWS WAF rate limits at full scale) -> 
 
 CloudFront is the only way in: the function URL and the bucket refuse unsigned calls.
 
-A push to `main` that changes the app is deployed by GitHub Actions. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md).
+A push to `main` that changes the app is deployed by GitHub Actions, on a runner that CodeBuild hosts in this account, so CI holds no AWS keys. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md) and [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md).
 
 ## The three stacks
 
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
-| `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
+| `bootstrap/` | The S3 state bucket, the CodeBuild runner that the deploy job runs on, the deploy role it signs in as, and the connection to GitHub | You, once (and again when its permissions change) |
 | `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
 | `app/` | The Lambda function, its function URL, its log group, the web page's S3 bucket, the CloudFront distribution, its access logs (not at full scale) and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
@@ -33,11 +33,17 @@ All three states are in the S3 bucket.
 
 Do these once, in order, on a commit that is on `main`.
 
-1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file.
+1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. Create the GitHub connection first and approve it, because the runner's webhook can't be made through a pending connection.
 
    ```bash
    printf 'terraform {\n  backend "local" {}\n}\n' > infra/bootstrap/backend_override.tf
    terraform -chdir=infra/bootstrap init
+   terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github
+   ```
+
+   Then approve the connection: in the console, open Developer Tools > Settings > Connections (in the stack's region), choose the pending `url-shortener-github` and "Update pending connection". This installs the AWS Connector for GitHub app; give it access to this repository. Then apply the rest:
+
+   ```bash
    terraform -chdir=infra/bootstrap apply
    terraform -chdir=infra/bootstrap output
    ```
@@ -52,37 +58,20 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/app init -backend-config=../backend.hcl
    ```
 
-3. **Set up GitHub.** Under Settings > Environments, create `production` and limit its deployment branches to `main`. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
+3. **Set up GitHub.** Under Settings > Environments, create `production` and limit its deployment branches to `main`. It only feeds GitHub's deployment history. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
 
 ```bash
 gh variable set AWS_REGION --body eu-north-1
 gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap output -raw state_bucket)"
-gh variable set AWS_PLAN_ROLE_ARN --body "$(terraform -chdir=infra/bootstrap output -raw plan_role_arn)"
-gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=infra/bootstrap output -raw deploy_role_arn)"
 ```
 
-4. **Create the CI access keys.** The bootstrap made one IAM user per role but no keys, so they stay out of the state. Make each key and store it as a GitHub secret (`gh` and `jq` are used here; the secrets can also be added in Settings). The deploy keys go to the `production` environment from step 3, so only `main` can use them; the plan keys go to the repository.
-
-   ```bash
-   user=$(terraform -chdir=infra/bootstrap output -raw deploy_user_name)
-   key=$(aws iam create-access-key --user-name "$user" --query AccessKey --output json)
-   jq -j .AccessKeyId <<<"$key" | gh secret set AWS_DEPLOY_ACCESS_KEY_ID --env production
-   jq -j .SecretAccessKey <<<"$key" | gh secret set AWS_DEPLOY_SECRET_ACCESS_KEY --env production
-
-   user=$(terraform -chdir=infra/bootstrap output -raw plan_user_name)
-   key=$(aws iam create-access-key --user-name "$user" --query AccessKey --output json)
-   jq -j .AccessKeyId <<<"$key" | gh secret set AWS_PLAN_ACCESS_KEY_ID
-   jq -j .SecretAccessKey <<<"$key" | gh secret set AWS_PLAN_SECRET_ACCESS_KEY
-   unset key
-   ```
-
-5. **Apply the foundation.** Read the plan first. It takes a few seconds.
+4. **Apply the foundation.** Read the plan first. It takes a few seconds.
 
    ```bash
    terraform -chdir=infra/foundation apply
    ```
 
-6. **Create the function, the bucket and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
+5. **Create the function, the bucket and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
 
    ```bash
    infra/scripts/release.sh # yes
@@ -92,9 +81,9 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
 
    `release.sh` also uploads the web page.
 
-7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that CI can sign in.
+6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that the runner can sign in.
 
-If a role is refused a `lambda:`, `logs:` or `s3:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
+If the role is refused a `lambda:`, `logs:` or `s3:` action, add it in `bootstrap/deploy-role.tf` and apply the bootstrap again: the permission list hasn't been run against a real account yet.
 
 ## Change the bootstrap
 
@@ -105,13 +94,13 @@ terraform -chdir=infra/bootstrap plan
 terraform -chdir=infra/bootstrap apply
 ```
 
-The access keys and GitHub settings stay as they are.
+The GitHub settings stay as they are.
 
 ## Deploy
 
-**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
+**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it: a `build` job on GitHub's runners makes the zip and the page, then a `deploy` job on the CodeBuild runner applies and uploads them. Its logs are also in the `/aws/codebuild/url-shortener-deploy` log group. If the `deploy` job never starts, check the webhook of the `url-shortener-deploy` CodeBuild project and that the connection is still approved. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
 
-**Web page changes** (`web/`): merge to `main`. After the app deploy, the Deploy workflow's `web` job builds the page, uploads it with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
+**Web page changes** (`web/`): merge to `main`. After the app deploy, the Deploy workflow uploads the page it built with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
 
 A change to CloudFront takes a few minutes to reach every location; the Deploy workflow's `/health` check runs after that.
 
@@ -142,9 +131,39 @@ terraform -chdir=infra/foundation plan
 terraform -chdir=infra/foundation apply
 ```
 
-## Rotate the CI access keys
+## Move an existing setup off access keys
 
-Repeat step 4 (a user can hold two keys, so the old one works until you delete it), then delete the old key: `aws iam delete-access-key --user-name <user> --access-key-id <old key id>`, with the id from `aws iam list-access-keys --user-name <user>`.
+For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out, and do 2 to 4 together: from 2 until the merge, Deploy can't sign in.
+
+1. **Create and approve the connection**, as in step 1 of "Set up and first run": `terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github`, then approve it in the console.
+2. **Delete the two users' access keys.** Terraform can't delete a user that has one, so this must come before the apply that removes the users (names are for the default `name`).
+
+   ```bash
+   for user in github-deploy-url-shortener github-plan-url-shortener; do
+     for key in $(aws iam list-access-keys --user-name "$user" --query 'AccessKeyMetadata[].AccessKeyId' --output text); do
+       aws iam delete-access-key --user-name "$user" --access-key-id "$key"
+     done
+   done
+   ```
+
+3. **Apply the bootstrap.** It makes the runner, changes the deploy role's trust to it, and removes the plan role and both users.
+
+   ```bash
+   terraform -chdir=infra/bootstrap apply
+   ```
+
+4. **Merge** the change to `main`. The old `deploy.yml` can't sign in any more, so the merge is what brings deploys back.
+5. **Run Deploy once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check the runner.
+6. **Delete the old GitHub settings.**
+
+   ```bash
+   gh secret delete AWS_DEPLOY_ACCESS_KEY_ID --env production
+   gh secret delete AWS_DEPLOY_SECRET_ACCESS_KEY --env production
+   gh secret delete AWS_PLAN_ACCESS_KEY_ID
+   gh secret delete AWS_PLAN_SECRET_ACCESS_KEY
+   gh variable delete AWS_DEPLOY_ROLE_ARN --env production
+   gh variable delete AWS_PLAN_ROLE_ARN
+   ```
 
 ## Rollback
 
@@ -168,7 +187,7 @@ Destroying the app takes several minutes, because CloudFront disables and then d
 
 If the table has deletion protection on, set `table_deletion_protection = false` in `infra/foundation/terraform.tfvars` and apply first. Destroying the table deletes the links, and its point-in-time backups with them.
 
-The bootstrap stays; it costs almost nothing. To remove it too, delete the two users' access keys (Terraform can't delete a user that has one), move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
+The bootstrap stays; it costs almost nothing. To remove it too, move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
 
 Then check nothing is left; it should print nothing:
 

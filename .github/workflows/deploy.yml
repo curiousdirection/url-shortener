@@ -1,6 +1,10 @@
-# Deploys the app: build the zip, apply infra/app, check /health.
+# Deploys the app: build the zip and the page, apply infra/app, check /health.
 # Then, if the page changed, uploads it.
 # Starts when CI has passed on main; run it by hand with ref to roll back.
+#
+# The build job runs the npm packages on a GitHub-hosted runner, with no AWS credentials.
+# The deploy job runs on a CodeBuild-hosted runner in our AWS account and gets its credentials from the deploy role (infra/bootstrap/runner.tf), so there are no access keys.
+# The workflow must stay named "Deploy": that is what the runner's webhook filters on.
 name: Deploy
 
 on:
@@ -16,7 +20,6 @@ on:
         type: string
 
 # Read-only by default.
-# Only the release job can get AWS credentials.
 permissions:
   contents: read
 
@@ -25,24 +28,15 @@ defaults:
     shell: bash
 
 jobs:
-  release:
+  build:
     # After CI passed on main (not a failed or cancelled run), or by hand.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    # One deploy at a time.
-    # A new one waits rather than cancelling a running apply; a newer one replaces one that is still waiting.
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
     runs-on: ubuntu-latest
-    environment: production # only main can use it, so only main gets the deploy keys
+    timeout-minutes: 10
     permissions:
       contents: read
-    timeout-minutes: 30
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
-      ROLLBACK_TO: ${{ inputs.ref }}
+    outputs:
+      hash: ${{ steps.zip.outputs.hash }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,7 +48,7 @@ jobs:
         if: inputs.ref != ''
         run: infra/scripts/check-on-main.sh
 
-      # The zip is built before signing in to AWS, so the npm packages never run with credentials.
+      # Everything npm runs is here, so it never runs where AWS credentials are available.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
@@ -63,39 +57,37 @@ jobs:
       - name: Build the zip
         id: zip
         run: echo "hash=$(infra/scripts/build-zip.sh)" >> "$GITHUB_OUTPUT"
+      - run: npm run web:build
 
-      - uses: ./.github/actions/setup-terraform
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          role: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
+          name: app-zip
+          path: build/app.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web
+          path: build/web
+          if-no-files-found: error
 
-      - name: Skip if torn down or unchanged
-        run: infra/scripts/deploy-skip.sh app
-
-      - name: Plan and apply
-        if: env.SKIP == ''
-        env:
-          HASH: ${{ steps.zip.outputs.hash }}
-        run: infra/scripts/apply-app.sh "$HASH"
-
-      - name: Check /health
-        if: env.SKIP == ''
-        run: infra/scripts/check-live.sh app
-
-  # The web page deploys apart from the function, after it, so a new bucket or CDN setting is in place first.
-  web:
-    needs: release
-    runs-on: ubuntu-latest
-    environment: production
+  # The function first, then the web page, so a new bucket or CDN setting is in place before the page goes up.
+  deploy:
+    needs: build
+    # One deploy at a time.
+    # A new one waits rather than cancelling a running apply; a newer one replaces one that is still waiting.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
+    # The CodeBuild runner project (infra/bootstrap/runner.tf).
+    runs-on: codebuild-url-shortener-deploy-${{ github.run_id }}-${{ github.run_attempt }}
+    # For GitHub's deployment history only; the deploy role's trust policy and the workflow name are what limit who can deploy (docs/security.md).
+    environment: production
     permissions:
       contents: read
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }} # the AWS CLI reads this one
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
       ROLLBACK_TO: ${{ inputs.ref }}
@@ -103,32 +95,48 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 0
+          fetch-depth: 0 # deploy-skip.sh compares with the deployed commit
 
-      - name: Check the rollback commit is on main
-        if: inputs.ref != ''
-        run: infra/scripts/check-on-main.sh
+      # The scripts and Terraform's setup need these, and the CodeBuild image is not the GitHub-hosted one.
+      - name: Check the runner has its tools
+        run: |
+          for tool in aws curl git unzip; do
+            command -v "$tool" >/dev/null || { echo "::error::The runner image has no $tool"; exit 1; }
+          done
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          node-version-file: .node-version
-          cache: npm
-      - run: npm ci
-      - run: npm run web:build
+          name: app-zip
+          path: build
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web
+          path: build/web
 
       - uses: ./.github/actions/setup-terraform
         with:
-          role: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
+          init: "true"
 
-      - name: Skip if torn down or unchanged
+      - name: Skip the function if torn down or unchanged
+        run: infra/scripts/deploy-skip.sh app
+
+      - name: Plan and apply
+        if: env.SKIP_APP == ''
+        env:
+          HASH: ${{ needs.build.outputs.hash }}
+        run: infra/scripts/apply-app.sh "$HASH"
+
+      - name: Check /health
+        if: env.SKIP_APP == ''
+        run: infra/scripts/check-live.sh app
+
+      - name: Skip the page if torn down or unchanged
         run: infra/scripts/deploy-skip.sh web
 
       - name: Upload the page
-        if: env.SKIP == ''
+        if: env.SKIP_WEB == ''
         run: infra/scripts/release-web.sh
 
       - name: Check the page is live
-        if: env.SKIP == ''
+        if: env.SKIP_WEB == ''
         run: infra/scripts/check-live.sh web

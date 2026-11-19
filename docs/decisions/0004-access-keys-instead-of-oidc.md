@@ -1,6 +1,6 @@
 # 4. Sign in to AWS with access keys instead of OIDC
 
-Date: 2026-11-17. Status: accepted; supersedes the OIDC sign-in in [0003](0003-split-stacks-remote-state-and-ci-deploys.md).
+Date: 2026-11-17. Status: superseded by [0011](0011-deploy-on-a-codebuild-runner.md); it superseded the OIDC sign-in in [0003](0003-split-stacks-remote-state-and-ci-deploys.md).
 
 ## Context
 
