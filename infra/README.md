@@ -111,7 +111,7 @@ A change to CloudFront takes a few minutes to reach every location; the Deploy w
 
 **Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
 
-**Access logs** (`access_logs`) are on for practice and off at full scale. Turning them on or off creates or deletes resources, which CI can't do: change the setting in `infra/app/terraform.tfvars` and run `release.sh`. A change can take up to 12 hours to reach CloudFront, so the first lines may be slow to appear.
+**Access logs** (`cdn_access_logs`) are on for practice and off at full scale. Turning them on or off creates or deletes resources, which CI can't do: change the setting in `infra/app/terraform.tfvars` and run `release.sh`. A change can take up to 12 hours to reach CloudFront, so the first lines may be slow to appear.
 
 To read them, open CloudWatch > Logs Insights in us-east-1 (N. Virginia), choose the `url-shortener-cdn-access` log group and run, for example, the latest API requests with their timings:
 
