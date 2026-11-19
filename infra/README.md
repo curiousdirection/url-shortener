@@ -113,14 +113,13 @@ A change to CloudFront takes a few minutes to reach every location; the Deploy w
 
 **Access logs** (`cdn_access_logs`) are on for practice and off at full scale. Turning them on or off creates or deletes resources, which CI can't do: change the setting in `infra/app/terraform.tfvars` and run `release.sh`. A change can take up to 12 hours to reach CloudFront, so the first lines may be slow to appear.
 
-To read them, open CloudWatch > Logs Insights in us-east-1 (N. Virginia), choose the `url-shortener-cdn-access` log group and run, for example, the latest API requests with their timings:
+To read them, use the AWS CLI: the Free plan's console doesn't show us-east-1, but the API works there. For example, the API requests of the last hour (method, path, status, `time-taken`, `origin-fbl`):
 
+```bash
+aws logs tail url-shortener-cdn-access --region us-east-1 --since 1h --format short | cut -d' ' -f2- | jq -r 'select(."cs-uri-stem" | startswith("/api/")) | [."cs-method", ."cs-uri-stem", ."sc-status", ."time-taken", ."origin-fbl"] | @tsv'
 ```
-fields `timestamp(ms)`, `cs-method`, `cs-uri-stem`, `sc-status`, `time-taken`, `origin-fbl`
-| filter `cs-uri-stem` like /^\/api\//
-| sort `timestamp(ms)` desc
-| limit 20
-```
+
+Without the `cut` and `jq`, it prints every line with all its fields; add `--follow` to keep watching.
 
 `time-taken` is the whole request as CloudFront saw it; `origin-fbl` is the part spent waiting for the function URL. To find one request, match `x-edge-request-id` to the `x-amz-cf-id` header of its response.
 
