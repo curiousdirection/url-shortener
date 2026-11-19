@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { AliasTakenError, type UrlService } from "./urlService.js";
 
-const RESERVED = new Set(["api", "health"]);
+const RESERVED = new Set(["api", "health", "assets"]);
 // What a code can look like: the alias rules, or the generated 7 characters.
 // Anything else is a 404 without a database read (DynamoDB rejects keys over 2048 bytes).
 const CODE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;

@@ -1,4 +1,5 @@
 # Deploys the app: build the zip, apply infra/app, check /health.
+# Then, if the page changed, uploads it.
 # Starts when CI has passed on main; run it by hand with ref to roll back.
 name: Deploy
 
@@ -51,9 +52,7 @@ jobs:
       # A rollback may only deploy code that was merged, not a commit from another branch.
       - name: Check the rollback commit is on main
         if: inputs.ref != ''
-        run: |
-          git merge-base --is-ancestor HEAD origin/main ||
-            { echo "::error::$ROLLBACK_TO is not in main's history"; exit 1; }
+        run: infra/scripts/check-on-main.sh
 
       # The zip is built before signing in to AWS, so the npm packages never run with credentials.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -71,52 +70,65 @@ jobs:
           access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
 
-      # The two steps below end the deploy early, changing nothing (the run stays green).
-      # Each sets SKIP, and every later step only runs while SKIP is unset.
+      - name: Skip if torn down or unchanged
+        run: infra/scripts/deploy-skip.sh app
 
-      # CI never recreates a torn-down stack; release.sh does.
-      - name: Skip if the app is torn down
-        run: |
-          if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
-            grep -q "No state file was found" err.txt || { cat err.txt >&2; exit 1; }
-          fi
-          if ! grep -qx 'aws_lambda_function.app' <<<"${list:-}"; then
-            echo "SKIP=torn-down" >> "$GITHUB_ENV"
-            echo "### Deploy skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # Docs or tests alone don't deploy.
-      # Compares the deployed commit with this one.
-      # A manual rollback skips this check.
-      - name: Skip if nothing in the app changed
-        if: env.SKIP == '' && inputs.ref == ''
-        run: |
-          deployed="$(terraform -chdir=infra/app output -raw app_version)"
-          if [ "$(infra/scripts/app-changed.sh "$deployed" HEAD)" = false ]; then
-            echo "SKIP=unchanged" >> "$GITHUB_ENV"
-            echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # Apply exactly the saved plan.
-      # -lock-timeout waits for a local release.sh.
       - name: Plan and apply
-        id: apply
         if: env.SKIP == ''
         env:
           HASH: ${{ steps.zip.outputs.hash }}
-        run: |
-          version="$(infra/scripts/app-version.sh)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          terraform -chdir=infra/app plan -input=false -lock-timeout=10m -no-color \
-            -var "app_version=$version" -var "package_hash=$HASH" -out=tfplan | tee plan.txt
-          { echo '### Terraform plan'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          terraform -chdir=infra/app apply -input=false -lock-timeout=10m tfplan
+        run: infra/scripts/apply-app.sh "$HASH"
 
       - name: Check /health
         if: env.SKIP == ''
-        env:
-          VERSION: ${{ steps.apply.outputs.version }}
-        run: |
-          url="$(terraform -chdir=infra/app output -raw url)"
-          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors "$url/health"
-          echo "### Deployed \`$VERSION\` to $url${ROLLBACK_TO:+ (rollback)}" >> "$GITHUB_STEP_SUMMARY"
+        run: infra/scripts/check-live.sh app
+
+  # The web page deploys apart from the function, after it, so a new bucket or CDN setting is in place first.
+  web:
+    needs: release
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      ROLLBACK_TO: ${{ inputs.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Check the rollback commit is on main
+        if: inputs.ref != ''
+        run: infra/scripts/check-on-main.sh
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run web:build
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          role: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
+
+      - name: Skip if torn down or unchanged
+        run: infra/scripts/deploy-skip.sh web
+
+      - name: Upload the page
+        if: env.SKIP == ''
+        run: infra/scripts/release-web.sh
+
+      - name: Check the page is live
+        if: env.SKIP == ''
+        run: infra/scripts/check-live.sh web

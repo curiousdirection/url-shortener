@@ -36,7 +36,7 @@ locals {
 }
 
 # Only what `terraform apply` in infra/app needs.
-# It can update the function, its URL, its log group, the CDN, its access logs and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
+# It can update the function, its URL, its log group, the CDN, its web bucket, its access logs and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id
@@ -85,7 +85,7 @@ resource "aws_iam_role_policy" "deploy" {
         ]
         Resource = [local.log_group_arn, "${local.log_group_arn}:*"]
       },
-      ], local.cloudfront_read_statements, local.access_log_read_statements, [
+      ], local.cloudfront_read_statements, local.web_bucket_read_statements, local.access_log_read_statements, [
       # CloudFront's access logs: update, not create or delete.
       {
         Effect   = "Allow"
@@ -119,6 +119,28 @@ resource "aws_iam_role_policy" "deploy" {
           "cloudfront:TagResource", "cloudfront:UntagResource",
         ]
         Resource = local.cdn_function_arn
+      },
+      # Clearing the page from the CDN's cache on each release (infra/scripts/release-web.sh).
+      {
+        Effect    = "Allow"
+        Action    = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
+        Resource  = "${local.cloudfront_arn}:distribution/*"
+        Condition = { StringEquals = { "aws:ResourceTag/Project" = var.name } }
+      },
+      # The web bucket: update its settings, not create or delete it.
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutBucketPolicy", "s3:PutBucketTagging", "s3:PutBucketPublicAccessBlock",
+          "s3:PutEncryptionConfiguration",
+        ]
+        Resource = local.web_bucket_arn
+      },
+      # The page's files: upload only, no delete.
+      {
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "${local.web_bucket_arn}/*"
       },
       # The web ACL: update, not create or delete.
       {

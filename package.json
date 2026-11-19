@@ -10,6 +10,8 @@
     "bundle": "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --minify --outfile=build/lambda/index.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "db:setup": "dotenv -o -e .env -- tsx src/setupDb.ts",
     "db:setup:test": "dotenv -o -e .env.test -- tsx src/setupDb.ts",
+    "web:dev": "vite",
+    "web:build": "tsc -p web && vite build",
     "test": "vitest run"
   },
   "dependencies": {
@@ -25,6 +27,7 @@
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "vite": "^8.3.8",
     "vitest": "^5.1.0"
   }
 }

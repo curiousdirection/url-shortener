@@ -1,16 +1,17 @@
-# CloudFront in front of the function.
-# Why: docs/decisions/0007-cdn-cloudfront.md.
+# CloudFront in front of the function, and of the web page's bucket (web.tf).
+# Why: docs/decisions/0007-cdn-cloudfront.md and docs/decisions/0009-frontend-on-s3.md.
 
 locals {
   function_url_host = trimsuffix(trimprefix(aws_lambda_function_url.app.function_url, "https://"), "/")
   origin_id         = "function-url"
+  web_origin_id     = "web-bucket"
 }
 
 # AWS's ready-made CloudFront policies, looked up by name.
 # CI isn't allowed to create its own.
 #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
 
-# For redirects: keeps each one as long as the app's Cache-Control says.
+# For redirects and the web page's files: keeps each one as long as its Cache-Control says.
 # It always keeps a response for at least 1 second, even one marked no-store, so /health uses the next one instead.
 data "aws_cloudfront_cache_policy" "caching_optimized" {
   name = "Managed-CachingOptimized"
@@ -51,6 +52,10 @@ resource "aws_cloudfront_distribution" "app" {
   http_version    = "http2and3"
   web_acl_id      = var.rate_limiting ? aws_wafv2_web_acl.app[0].arn : null
 
+  # What / shows.
+  # CloudFront turns / into /index.html before it picks a behaviour, so / gets the /index.html behaviour below.
+  default_root_object = "index.html"
+
   origin {
     origin_id                = local.origin_id
     domain_name              = local.function_url_host
@@ -72,6 +77,14 @@ resource "aws_cloudfront_distribution" "app" {
         origin_shield_region = origin_shield.value
       }
     }
+  }
+
+  # The web page's bucket.
+  # Signed with its own origin access control, which is why it has no origin config.
+  origin {
+    origin_id                = local.web_origin_id
+    domain_name              = aws_s3_bucket.web.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.web.id
   }
 
   # Redirects, cached as the app's Cache-Control says.
@@ -110,6 +123,27 @@ resource "aws_cloudfront_distribution" "app" {
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
     cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
+  }
+
+  # The web page, cached as the Cache-Control set on each file at upload says (infra/scripts/release-web.sh).
+  ordered_cache_behavior {
+    path_pattern           = "/index.html"
+    target_origin_id       = local.web_origin_id
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+  }
+
+  ordered_cache_behavior {
+    path_pattern           = "/assets/*"
+    target_origin_id       = local.web_origin_id
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
   }
 
   restrictions {
