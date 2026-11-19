@@ -29,3 +29,16 @@ variable "table_deletion_protection" {
   type        = bool
   default     = false
 }
+
+# Alarms
+
+# Required, with no default: an alarm that emails no one fails silently, so a missing address stops the plan instead.
+variable "alarm_email" {
+  description = "Email address the alarms are sent to. Kept out of git: set it in infra/foundation/terraform.tfvars."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+$", var.alarm_email))
+    error_message = "alarm_email must be an email address."
+  }
+}
