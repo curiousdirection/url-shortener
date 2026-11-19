@@ -40,6 +40,8 @@ resource "aws_lambda_function" "app" {
   memory_size   = var.memory_size
   timeout       = 10
 
+  reserved_concurrent_executions = var.reserved_concurrency
+
   # build-zip.sh puts the zip here and prints its hash.
   # Terraform is given the hash instead of reading the file, so a plan without the zip (CI's plan job) can reuse the current hash and show only real changes.
   filename         = "${path.module}/../../build/app.zip"

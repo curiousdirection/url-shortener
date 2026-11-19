@@ -33,6 +33,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 - **The web bucket is private.** It blocks public access, and its policy lets only this distribution read it (`infra/app/web.tf`).
 - **Only CloudFront can call the function.** The function URL requires signed calls, and only this distribution may make them (`infra/app/main.tf`, `cdn.tf`). So the app can trust the `X-Forwarded-Host` that CloudFront sets.
 - **Rate limits per IP, at full scale** (`rate_limiting`, off for practice). AWS WAF answers `429` after 1,000 requests or 20 link creations in 5 minutes (`infra/app/waf.tf`). A flood from many IPs still gets through; CloudFront's DDoS protection and the cache absorb it.
+- **A cap on the function.** At most 10 copies run at once (`reserved_concurrency`, higher at full scale), so a flood of requests for codes that aren't cached can't run up Lambda and DynamoDB use without limit. Past the cap, every visitor whose request misses the cache gets an error (`infra/app/variables.tf`).
 - **Encrypted connections.** Clients reach CloudFront over HTTPS (`/api/*` refuses plain HTTP), CloudFront reaches the function URL over HTTPS, and the function reaches DynamoDB over HTTPS.
 - **Encrypted storage.** The table is encrypted at rest (DynamoDB always does this, with an AWS-owned key). The Terraform state bucket is encrypted (SSE-S3), versioned, blocks public access and refuses non-TLS requests.
 - **Backups and delete protection** for the table are switched on at full scale (`infra/foundation/full-scale.tfvars.example`), and off for practice.
@@ -53,7 +54,6 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
 | Workflow linting | Broken or unsafe GitHub Actions | actionlint, zizmor |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
-| Branch protection | Unreviewed or unchecked code reaching `main` | GitHub settings: require a pull request and passing checks |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
 | Key rotation | Stale or leaked CI access keys, which don't expire | A reminder to rotate by hand (`infra/README.md`), or OIDC, which this account's Free plan blocks ([ADR 0004](decisions/0004-access-keys-instead-of-oidc.md)) |
-| Account monitoring | Suspicious API calls or access | CloudTrail, GuardDuty |
+| Account monitoring | Suspicious API calls or access | CloudTrail, AWS Config (the Free plan's SCP blocks GuardDuty and Security Hub) |
