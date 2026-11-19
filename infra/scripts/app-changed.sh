@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Prints "true" if the commits between <from> and <to> change
-# anything that goes into the zip or the app stack, "false" if
-# not (docs or tests alone).
-# The deploy workflow compares the deployed commit with the new
-# one and deploys on "true".
+# Prints "true" if the commits between <from> and <to> change anything that goes into the zip or the app stack, "false" if not (docs or tests alone). The deploy workflow compares the deployed commit with the new one and deploys on "true".
 # Usage: infra/scripts/app-changed.sh <from commit> <to commit>
 set -euo pipefail
 

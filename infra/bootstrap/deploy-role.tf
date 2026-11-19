@@ -1,5 +1,4 @@
-# The deploy role, used by .github/workflows/deploy.yml to apply
-# infra/app.
+# The deploy role, used by .github/workflows/deploy.yml to apply infra/app.
 
 resource "aws_iam_role" "deploy" {
   name                 = "github-deploy-${var.name}"
@@ -15,8 +14,7 @@ resource "aws_iam_role" "deploy" {
   })
 }
 
-# Its access key is only given to the `production` environment,
-# which only main can use.
+# Its access key is only given to the `production` environment, which only main can use.
 resource "aws_iam_user" "deploy" {
   name = "github-deploy-${var.name}"
 }
@@ -33,23 +31,18 @@ resource "aws_iam_user_policy" "deploy_assume_role" {
 locals {
   function_arn  = "arn:aws:lambda:${var.region}:${local.account_id}:function:${var.name}"
   log_group_arn = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/${var.name}/app"
-  # The function's role, made in infra/foundation/iam.tf with
-  # this exact name.
+  # The function's role, made in infra/foundation/iam.tf with this exact name.
   lambda_role_arn = "arn:aws:iam::${local.account_id}:role/${var.name}-lambda"
 }
 
-# Only what `terraform apply` in infra/app needs.
-# It can update the function, its URL, its log group, the CDN and
-# the web ACL but not create or delete them, so a change that
-# would replace one fails in CI instead of taking the app down.
+# Only what `terraform apply` in infra/app needs. It can update the function, its URL, its log group, the CDN and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat([
-      # State: the app state and its lock file; the foundation
-      # state read-only.
+      # State: the app state and its lock file; the foundation state read-only.
       { Effect = "Allow", Action = "s3:ListBucket", Resource = local.state_arn },
       {
         Effect   = "Allow"
@@ -58,9 +51,7 @@ resource "aws_iam_role_policy" "deploy" {
       },
       { Effect = "Allow", Action = "s3:GetObject", Resource = local.foundation_state },
 
-      # The one function: read everything Terraform refreshes,
-      # and change its code, settings, URL settings, invoke
-      # permissions and tags.
+      # The one function: read everything Terraform refreshes, and change its code, settings, URL settings, invoke permissions and tags.
       {
         Effect = "Allow"
         Action = [
@@ -71,8 +62,7 @@ resource "aws_iam_role_policy" "deploy" {
         ]
         Resource = local.function_arn
       },
-      # The one IAM permission a deploy needs: handing the
-      # function's role to Lambda.
+      # The one IAM permission a deploy needs: handing the function's role to Lambda.
       {
         Effect    = "Allow"
         Action    = "iam:PassRole"
@@ -95,9 +85,7 @@ resource "aws_iam_role_policy" "deploy" {
         Resource = [local.log_group_arn, "${local.log_group_arn}:*"]
       },
       ], local.cloudfront_read_statements, [
-      # The CDN: update, not create or delete.
-      # CloudFront picks the distribution's id, so it is matched
-      # by the Project tag the app stack sets.
+      # The CDN: update, not create or delete. CloudFront picks the distribution's id, so it is matched by the Project tag the app stack sets.
       {
         Effect    = "Allow"
         Action    = ["cloudfront:UpdateDistribution", "cloudfront:TagResource", "cloudfront:UntagResource"]

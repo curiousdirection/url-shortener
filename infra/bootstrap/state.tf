@@ -1,32 +1,19 @@
-# The S3 bucket that holds the Terraform state of all three
-# stacks, one file each (bootstrap/, foundation/ and
-# app/terraform.tfstate).
-# Whoever can write the state can change what Terraform builds,
-# so it is locked down.
+# The S3 bucket that holds the Terraform state of all three stacks, one file each (bootstrap/, foundation/ and app/terraform.tfstate). Whoever can write the state can change what Terraform builds, so it is locked down.
 
 data "aws_caller_identity" "current" {}
 
 locals {
-  # Bucket names are global across all AWS accounts, so the
-  # account id makes it unique.
-  # The name is handed on through `output state_bucket`: to
-  # backend.hcl, to the `state_bucket` variable of the app stack
-  # and to the TF_STATE_BUCKET variable in GitHub.
-  # Nothing else rebuilds it.
+  # Bucket names are global across all AWS accounts, so the account id makes it unique. The name is handed on through `output state_bucket`: to backend.hcl, to the `state_bucket` variable of the app stack and to the TF_STATE_BUCKET variable in GitHub. Nothing else rebuilds it.
   state_bucket = "${var.name}-tfstate-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket" "state" {
   bucket = local.state_bucket
-  # Without this, AWS refuses to delete a bucket that still holds
-  # state or old versions.
-  # `terraform destroy` here fails on purpose until you have
-  # emptied it.
+  # Without this, AWS refuses to delete a bucket that still holds state or old versions. `terraform destroy` here fails on purpose until you have emptied it.
   force_destroy = false
 }
 
-# Keep every old version of each state file, so a bad write can
-# be undone.
+# Keep every old version of each state file, so a bad write can be undone.
 resource "aws_s3_bucket_versioning" "state" {
   bucket = aws_s3_bucket.state.id
   versioning_configuration {
@@ -34,8 +21,7 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
-# Encrypt at rest with the S3-managed key (SSE-S3).
-# Keep it: see the kms:Decrypt deny in plan-role.tf.
+# Encrypt at rest with the S3-managed key (SSE-S3). Keep it: see the kms:Decrypt deny in plan-role.tf.
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {
@@ -54,8 +40,7 @@ resource "aws_s3_bucket_public_access_block" "state" {
   restrict_public_buckets = true
 }
 
-# Old versions are only for undoing mistakes, so drop them after
-# 90 days.
+# Old versions are only for undoing mistakes, so drop them after 90 days.
 resource "aws_s3_bucket_lifecycle_configuration" "state" {
   bucket = aws_s3_bucket.state.id
 
@@ -90,8 +75,6 @@ resource "aws_s3_bucket_policy" "state" {
     }]
   })
 
-  # The public access block and the policy are both "bucket
-  # settings"; applying them at the same time can fail with a
-  # conflict.
+  # The public access block and the policy are both "bucket settings"; applying them at the same time can fail with a conflict.
   depends_on = [aws_s3_bucket_public_access_block.state]
 }

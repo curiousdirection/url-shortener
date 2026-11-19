@@ -1,9 +1,4 @@
-# Inputs you can change.
-# The defaults are the practice values.
-# To override one, put it in terraform.tfvars (gitignored) or
-# pass `-var name=value`.
-# The function's own settings (memory) are in
-# infra/app/variables.tf.
+# Inputs you can change. The defaults are the practice values. To override one, put it in terraform.tfvars (gitignored) or pass `-var name=value`. The function's own settings (memory) are in infra/app/variables.tf.
 
 variable "name" {
   description = "Prefix for resource names and tags."
@@ -11,8 +6,7 @@ variable "name" {
   default     = "url-shortener"
 }
 
-# A project account is fixed to the region AWS assigned it
-# (eu-north-1 for Europe); check AWS Settings > Project.
+# A project account is fixed to the region AWS assigned it (eu-north-1 for Europe); check AWS Settings > Project.
 variable "region" {
   description = "AWS region."
   type        = string

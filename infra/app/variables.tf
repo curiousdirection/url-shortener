@@ -1,9 +1,4 @@
-# Inputs you can change.
-# The defaults are the practice values.
-# To override one, put it in terraform.tfvars (gitignored) or
-# pass `-var name=value`.
-# The table settings are in infra/foundation/variables.tf.
-# `state_bucket` has no default: you must set it (see below).
+# Inputs you can change. The defaults are the practice values. To override one, put it in terraform.tfvars (gitignored) or pass `-var name=value`. The table settings are in infra/foundation/variables.tf. `state_bucket` has no default: you must set it (see below).
 
 variable "name" {
   description = "Prefix for resource names and tags. Must match the foundation stack."
@@ -72,8 +67,7 @@ variable "rate_limiting" {
   default     = false
 }
 
-# WARN at full scale, where the START, END and REPORT lines would
-# cost thousands a month in CloudWatch.
+# WARN at full scale, where the START, END and REPORT lines would cost thousands a month in CloudWatch.
 variable "system_log_level" {
   description = "Lambda's own log lines: START, END and REPORT (with timings) for every request. INFO keeps them; WARN keeps only warnings and errors."
   type        = string
@@ -85,9 +79,7 @@ variable "system_log_level" {
   }
 }
 
-# 1024 because Lambda gives CPU in proportion to memory.
-# At 256 MB cold requests were about twice as slow, at about the
-# same cost per request.
+# 1024 because Lambda gives CPU in proportion to memory. At 256 MB cold requests were about twice as slow, at about the same cost per request.
 variable "memory_size" {
   description = "MB of memory for the function."
   type        = number

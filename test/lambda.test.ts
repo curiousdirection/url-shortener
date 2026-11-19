@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { handler } from "../src/lambda.js";
 
-// A Lambda function URL event (payload format 2.0), cut down to
-// what Hono reads.
+// A Lambda function URL event (payload format 2.0), cut down to what Hono reads.
 const event = (method: string, path: string) =>
   ({
     version: "2.0",

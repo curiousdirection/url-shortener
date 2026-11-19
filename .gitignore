@@ -8,6 +8,5 @@ build
 !*.tfvars.example
 tfplan
 infra/backend.hcl
-# Terraform override files, e.g. the bootstrap's local backend
-# for its first apply.
+# Terraform override files, e.g. the bootstrap's local backend for its first apply.
 *_override.tf
