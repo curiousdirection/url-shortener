@@ -23,7 +23,7 @@ flowchart LR
     end
 
     client -->|"GET /"| cdn
-    cdn -->|"signed"| web
+    cdn -->|"signed; only on a cache miss"| web
     client -->|"POST /api/urls"| cdn
     client -->|"GET /:code"| cdn
     cdn -->|"signed call; only on a cache miss for GET"| routes
