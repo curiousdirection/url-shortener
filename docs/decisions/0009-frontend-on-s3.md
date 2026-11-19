@@ -16,14 +16,14 @@ Creating a link needs a hand-made body hash for `x-amz-content-sha256` ([0007](0
 
 ## Why
 
-- **Not served by the function.** The page is static. Serving it from Lambda would run the function, and bill it, for every page view.
+- **Not served by the function.** The page releases apart from the function, so a page change never redeploys it and a bad function release can't change the page. A cache miss on the page needs no cold start, and `/assets/*` doesn't have to share the function's `/:code` paths.
 - **Not a separate host.** The API and the page on one address need no CORS and no second certificate.
 - **The edge cache absorbs the traffic.** Assets are hit once per edge location, and `index.html` until the next release.
 
 ## Consequences
 
 - **`/` may not reach the bucket.** The CloudFront docs don't say whether `/` is turned into `/index.html` before or after CloudFront picks the behaviour. If it is before, `/` is served from the bucket. If it is after, `/` matches the default behaviour and the function answers `404`. Check on the first release: `curl $url/` must return the HTML.
-- **Fallback, only if that check fails:** a viewer-request CloudFront Function on the default behaviour that sends `/` to the bucket (`cf.selectRequestOriginById`). It would run on every redirect. CloudFront Functions cost $0.10 per million invocations, so at about 30 billion requests a month that is about $3,000 a month ("Cost" in [infra/README.md](../../infra/README.md)). Not built.
+- **Fallback, only if that check fails:** a viewer-request CloudFront Function on the default behaviour that sends `/` to the bucket (`cf.selectRequestOriginById`). It would run on every redirect. CloudFront Functions cost $0.10 per million invocations, so at about 30 billion requests a month that is about $3,000 a month. Not built.
 - **`assets` is a reserved alias,** because `/assets/*` can't reach the function.
 - **A public form makes abuse easier.** Creating a link no longer needs a hash by hand ([docs/security.md](../security.md)).
 - **CI can upload to the bucket and clear the cache, but not create or delete the bucket,** like the other resources, so the first release is run by hand.
