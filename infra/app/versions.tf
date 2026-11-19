@@ -1,15 +1,23 @@
-# The app stack: the parts that change on every release. The Lambda function, its URL and the
-# log group. Everything it depends on (the table and the function's role) is in ../foundation.
-# See docs/decisions/0003 and 0006.
+# The app stack: the parts that change on every release.
+# The Lambda function, its URL and the log group.
+# Everything it depends on is in infra/foundation: the table and
+# the function's role.
+# See:
+# docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md
+# docs/decisions/0006-move-to-lambda-and-dynamodb.md
 #
-# This is the only stack that CI applies (.github/workflows/deploy.yml), with the
-# `github-deploy-url-shortener` role from ../bootstrap.
+# This is the only stack that CI applies
+# (.github/workflows/deploy.yml).
+# It uses the `github-deploy-url-shortener` role from
+# infra/bootstrap.
 
 terraform {
   required_version = ">= 1.11"
 
-  # State: see ../foundation/versions.tf. Same bucket, its own state file.
-  #   terraform init -backend-config=../backend.hcl      (see ../backend.hcl.example)
+  # State: see infra/foundation/versions.tf.
+  # Same bucket, its own state file.
+  # See infra/backend.hcl.example.
+  #   terraform init -backend-config=../backend.hcl
   backend "s3" {
     key          = "app/terraform.tfstate"
     use_lockfile = true
