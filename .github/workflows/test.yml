@@ -1,8 +1,10 @@
-# The tests, the build and the zip, against a DynamoDB Local service. Not run on its own: ci.yml
-# calls it on every push.
+# The comment-width check, the tests, the build and the zip,
+# against a DynamoDB Local service.
+# Not run on its own: ci.yml calls it on every push.
 #
-# It needs nothing but to read the code. ci.yml passes it no secrets, so the code and packages
-# it runs can't get AWS credentials.
+# It needs nothing but to read the code. ci.yml passes it no
+# secrets, so the code and packages it runs can't get AWS
+# credentials.
 name: Test
 
 on:
@@ -13,26 +15,30 @@ permissions:
 
 defaults:
   run:
-    # Adds `-o pipefail`, so `a | b` fails when `a` fails (the default shell only has `-e`).
+    # Adds `-o pipefail`, so `a | b` fails when `a` fails (the
+    # default shell only has `-e`).
     shell: bash
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # The same DynamoDB Local as `dynamodb-test` in docker-compose.yml (and .env.test).
+    # The same DynamoDB Local as `dynamodb-test` in
+    # docker-compose.yml (and .env.test).
     services:
       dynamodb:
         image: amazon/dynamodb-local:3.3.2
         ports: ["8001:8000"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: infra/scripts/check-comment-width.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
-      # The image has no health check we can use, so retry until the service answers.
+      # The image has no health check we can use, so retry until
+      # the service answers.
       - name: Create the test table
         run: |
           for _ in $(seq 20); do npm run db:setup:test && exit 0; sleep 3; done
