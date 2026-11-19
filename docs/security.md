@@ -8,7 +8,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 - **Stored keys, narrowly used.** GitHub Actions signs in with an IAM user's access key (a GitHub secret) and assumes a role, so jobs get credentials that expire within an hour. Each user can only assume its own role, and each role trusts only its user ([ADR 0004](decisions/0004-access-keys-instead-of-oidc.md)).
 - **Deploy keys only on `main`.** They are secrets of the `production` environment, which only `main` can use. The plan keys are repository secrets, so CI on any branch can use them.
-- **Least privilege for CI.** The deploy role can update, not create or delete, the function, its URL and log group, the CloudFront distribution and the web ACL, and pass the function's role to Lambda. The plan role is read-only. Neither can change IAM or the bootstrap stack (`infra/bootstrap/deploy-role.tf`, `plan-role.tf`).
+- **Least privilege for CI.** The deploy role can update, not create or delete, the function, its URL and log group, the CloudFront distribution, its access logs and the web ACL, and pass the function's role to Lambda. The plan role is read-only. Neither can change IAM or the bootstrap stack (`infra/bootstrap/deploy-role.tf`, `plan-role.tf`).
 - **No secrets for branches.** The plan role is explicitly denied SSM parameter reads, Secrets Manager values and KMS decryption, except through Lambda so it can read the function's environment variables. Code pushed to a branch couldn't read a secret if one is added later, as long as secrets live in SSM or Secrets Manager and never in Lambda environment variables. The app has no secrets today.
 - **Workflow permissions.** Workflows get a read-only `GITHUB_TOKEN`. The test job, which runs npm packages, is given no secrets. The deploy job builds the zip, and so runs npm packages, before it signs in to AWS.
 - **Infra changes need a person.** CI never plans or applies `infra/foundation` or `infra/bootstrap`.
@@ -19,7 +19,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 - **No credentials in the code.** The function gets short-lived credentials from its role. The table name is its only setting.
 - **No overwrites.** A link is written only if its code is free (a conditional write), so an existing link can't be replaced by creating another with the same code or alias.
 - **Random codes.** Codes come from `node:crypto`, so they can't be guessed from earlier ones.
-- **No request data in the logs.** The app doesn't log requests. Lambda's own per-request lines hold only ids and timings.
+- **Nothing in the logs identifies a visitor.** The app doesn't log requests. Lambda's own per-request lines hold only ids and timings. CloudFront's access logs (`access_logs`, off at full scale) hold each request's time, path, status, edge location and timings. They are deleted after 7 days.
 
 ### Supply chain
 

@@ -36,7 +36,7 @@ locals {
 }
 
 # Only what `terraform apply` in infra/app needs.
-# It can update the function, its URL, its log group, the CDN and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
+# It can update the function, its URL, its log group, the CDN, its access logs and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id
@@ -85,7 +85,20 @@ resource "aws_iam_role_policy" "deploy" {
         ]
         Resource = [local.log_group_arn, "${local.log_group_arn}:*"]
       },
-      ], local.cloudfront_read_statements, [
+      ], local.cloudfront_read_statements, local.access_log_read_statements, [
+      # CloudFront's access logs: update, not create or delete.
+      {
+        Effect   = "Allow"
+        Action   = ["logs:UpdateDeliveryConfiguration", "logs:TagResource", "logs:UntagResource"]
+        Resource = local.access_log_delivery_arns
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource",
+        ]
+        Resource = [local.access_log_group_arn, "${local.access_log_group_arn}:*"]
+      },
       # The CDN: update, not create or delete.
       # CloudFront picks the distribution's id, so it is matched by the Project tag the app stack sets.
       {

@@ -61,6 +61,35 @@ locals {
     },
   ]
 
+  # CloudFront's access logs, all in us-east-1, with the exact names infra/app/access-logs.tf gives them.
+  access_logs_arn      = "arn:aws:logs:us-east-1:${local.account_id}"
+  access_log_group_arn = "${local.access_logs_arn}:log-group:${var.name}-cdn-access"
+  access_log_delivery_arns = [
+    "${local.access_logs_arn}:delivery-source:${var.name}-cdn",
+    "${local.access_logs_arn}:delivery-destination:${var.name}-cdn-access",
+    "${local.access_logs_arn}:delivery:*", # AWS picks the delivery's id
+  ]
+
+  # What Terraform reads to refresh the access logs, for both roles.
+  access_log_read_statements = [
+    {
+      Effect   = "Allow"
+      Action   = ["logs:GetDeliverySource", "logs:GetDeliveryDestination", "logs:GetDelivery", "logs:ListTagsForResource"]
+      Resource = local.access_log_delivery_arns
+    },
+    {
+      Effect   = "Allow"
+      Action   = ["logs:ListTagsForResource", "logs:ListTagsLogGroup"]
+      Resource = [local.access_log_group_arn, "${local.access_log_group_arn}:*"]
+    },
+    # Neither can be limited to one resource.
+    {
+      Effect   = "Allow"
+      Action   = ["logs:DescribeLogGroups", "logs:DescribeResourcePolicies"]
+      Resource = "*"
+    },
+  ]
+
   # Explicit denies for both roles: they hold even if an allow is widened by mistake.
   deny_statements = [
     {
