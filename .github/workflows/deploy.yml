@@ -52,9 +52,7 @@ jobs:
       # A rollback may only deploy code that was merged, not a commit from another branch.
       - name: Check the rollback commit is on main
         if: inputs.ref != ''
-        run: |
-          git merge-base --is-ancestor HEAD origin/main ||
-            { echo "::error::$ROLLBACK_TO is not in main's history"; exit 1; }
+        run: infra/scripts/check-on-main.sh
 
       # The zip is built before signing in to AWS, so the npm packages never run with credentials.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -72,55 +70,19 @@ jobs:
           access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
 
-      # The two steps below end the deploy early, changing nothing (the run stays green).
-      # Each sets SKIP, and every later step only runs while SKIP is unset.
+      # Ends the deploy early, changing nothing (the run stays green), if the app is torn down or nothing in it changed.
+      - name: Skip if torn down or unchanged
+        run: infra/scripts/deploy-skip.sh app
 
-      # CI never recreates a torn-down stack; release.sh does.
-      - name: Skip if the app is torn down
-        run: |
-          if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
-            grep -q "No state file was found" err.txt || { cat err.txt >&2; exit 1; }
-          fi
-          if ! grep -qx 'aws_lambda_function.app' <<<"${list:-}"; then
-            echo "SKIP=torn-down" >> "$GITHUB_ENV"
-            echo "### Deploy skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # Docs or tests alone don't deploy.
-      # Compares the deployed commit with this one.
-      # A manual rollback skips this check.
-      - name: Skip if nothing in the app changed
-        if: env.SKIP == '' && inputs.ref == ''
-        run: |
-          deployed="$(terraform -chdir=infra/app output -raw app_version)"
-          if [ "$(infra/scripts/app-changed.sh app "$deployed" HEAD)" = false ]; then
-            echo "SKIP=unchanged" >> "$GITHUB_ENV"
-            echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # Apply exactly the saved plan.
-      # -lock-timeout waits for a local release.sh.
       - name: Plan and apply
-        id: apply
         if: env.SKIP == ''
         env:
           HASH: ${{ steps.zip.outputs.hash }}
-        run: |
-          version="$(infra/scripts/app-version.sh)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          terraform -chdir=infra/app plan -input=false -lock-timeout=10m -no-color \
-            -var "app_version=$version" -var "package_hash=$HASH" -out=tfplan | tee plan.txt
-          { echo '### Terraform plan'; echo '```'; head -c 900000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          terraform -chdir=infra/app apply -input=false -lock-timeout=10m tfplan
+        run: infra/scripts/apply-app.sh "$HASH"
 
       - name: Check /health
         if: env.SKIP == ''
-        env:
-          VERSION: ${{ steps.apply.outputs.version }}
-        run: |
-          url="$(terraform -chdir=infra/app output -raw url)"
-          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors "$url/health"
-          echo "### Deployed \`$VERSION\` to $url${ROLLBACK_TO:+ (rollback)}" >> "$GITHUB_STEP_SUMMARY"
+        run: infra/scripts/check-live.sh app
 
   # The web page deploys apart from the function, after it, so a new bucket or CDN setting is in place first.
   web:
@@ -146,9 +108,7 @@ jobs:
 
       - name: Check the rollback commit is on main
         if: inputs.ref != ''
-        run: |
-          git merge-base --is-ancestor HEAD origin/main ||
-            { echo "::error::$ROLLBACK_TO is not in main's history"; exit 1; }
+        run: infra/scripts/check-on-main.sh
 
       # Built before signing in, like the zip above.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -164,36 +124,13 @@ jobs:
           access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
 
-      # Same rules as in the release job: CI never recreates anything, and a rollback always deploys.
-      # The live release is the one in the page's <meta name="release">.
-      # If the page isn't there yet (the first release.sh uploads it), it deploys.
-      - name: Skip if the page is torn down or unchanged
-        run: |
-          if ! list="$(terraform -chdir=infra/app state list 2>err.txt)"; then
-            grep -q "No state file was found" err.txt || { cat err.txt >&2; exit 1; }
-          fi
-          if ! grep -qx 'aws_s3_bucket.web' <<<"${list:-}"; then
-            echo "SKIP=torn-down" >> "$GITHUB_ENV"
-            echo "### Page skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
-          elif [ -z "$ROLLBACK_TO" ]; then
-            url="$(terraform -chdir=infra/app output -raw url)"
-            live="$(curl -fsS "$url/" | sed -n 's/.*<meta name="release" content="\([^"]*\)".*/\1/p' || true)"
-            if [ -n "$live" ] && [ "$(infra/scripts/app-changed.sh web "$live" HEAD)" = false ]; then
-              echo "SKIP=unchanged" >> "$GITHUB_ENV"
-              echo "### Page not uploaded: no web changes since the live release \`$live\`." >> "$GITHUB_STEP_SUMMARY"
-            fi
-          fi
+      - name: Skip if torn down or unchanged
+        run: infra/scripts/deploy-skip.sh web
 
       - name: Upload the page
         if: env.SKIP == ''
         run: infra/scripts/release-web.sh
 
-      # This also checks the routing: / must come back as the page and not from the function.
       - name: Check the page is live
         if: env.SKIP == ''
-        run: |
-          url="$(terraform -chdir=infra/app output -raw url)"
-          version="$(infra/scripts/app-version.sh)"
-          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors "$url/" | grep -q "name=\"release\" content=\"$version\"" ||
-            { echo "::error::$url/ does not serve release $version"; exit 1; }
-          echo "### Page \`$version\` is live at $url${ROLLBACK_TO:+ (rollback)}" >> "$GITHUB_STEP_SUMMARY"
+        run: infra/scripts/check-live.sh web
