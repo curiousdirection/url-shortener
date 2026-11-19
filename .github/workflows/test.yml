@@ -1,6 +1,8 @@
-# The tests, the build and the zip, against a DynamoDB Local service. Not run on its own: ci.yml calls it on every push.
+# The tests, the build and the zip, against a DynamoDB Local service.
+# Not run on its own: ci.yml calls it on every push.
 #
-# It needs nothing but to read the code. ci.yml passes it no secrets, so the code and packages it runs can't get AWS credentials.
+# It needs nothing but to read the code.
+# ci.yml passes it no secrets, so the code and packages it runs can't get AWS credentials.
 name: Test
 
 on:

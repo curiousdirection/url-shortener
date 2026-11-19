@@ -1,8 +1,12 @@
-# How GitHub Actions signs in to AWS. Each of the two roles has its own IAM user, whose only permission is to assume that role. The workflow signs in with the user's access key (a GitHub secret) and assumes the role, so jobs run on credentials that expire within an hour. Why keys and not OIDC: docs/decisions/0004-access-keys-instead-of-oidc.md.
+# How GitHub Actions signs in to AWS.
+# Each of the two roles has its own IAM user, whose only permission is to assume that role.
+# The workflow signs in with the user's access key (a GitHub secret) and assumes the role, so jobs run on credentials that expire within an hour.
+# Why keys and not OIDC: docs/decisions/0004-access-keys-instead-of-oidc.md.
 #
 # The keys are not made here, so they stay out of the state; see "Set up and first run" in infra/README.md.
 #
-# Two roles: the deploy role (deploy-role.tf) applies infra/app; the plan role (plan-role.tf) is read-only, for CI on any branch. Neither can change IAM or this stack.
+# Two roles: the deploy role (deploy-role.tf) applies infra/app; the plan role (plan-role.tf) is read-only, for CI on any branch.
+# Neither can change IAM or this stack.
 
 locals {
   account_id       = data.aws_caller_identity.current.account_id
@@ -16,7 +20,8 @@ locals {
 
   cdn_web_acl_arn = "arn:aws:wafv2:us-east-1:${local.account_id}:global/webacl/${var.name}/*"
 
-  # What Terraform reads to refresh the CDN, for both roles. CloudFront picks the ids, hence `*`.
+  # What Terraform reads to refresh the CDN, for both roles.
+  # CloudFront picks the ids, hence `*`.
   cloudfront_read_statements = [
     {
       Effect   = "Allow"
@@ -47,7 +52,8 @@ locals {
       ]
       Resource = "*"
     },
-    # The web ACL, in us-east-1. WAF adds an id after the name, hence `*`.
+    # The web ACL, in us-east-1.
+    # WAF adds an id after the name, hence `*`.
     {
       Effect   = "Allow"
       Action   = ["wafv2:GetWebACL", "wafv2:ListTagsForResource"]

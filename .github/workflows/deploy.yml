@@ -1,4 +1,5 @@
-# Deploys the app: build the zip, apply infra/app, check /health. Starts when CI has passed on main; run it by hand with ref to roll back.
+# Deploys the app: build the zip, apply infra/app, check /health.
+# Starts when CI has passed on main; run it by hand with ref to roll back.
 name: Deploy
 
 on:
@@ -13,7 +14,8 @@ on:
         required: false
         type: string
 
-# Read-only by default. Only the release job can get AWS credentials.
+# Read-only by default.
+# Only the release job can get AWS credentials.
 permissions:
   contents: read
 
@@ -25,7 +27,8 @@ jobs:
   release:
     # After CI passed on main (not a failed or cancelled run), or by hand.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    # One deploy at a time. A new one waits rather than cancelling a running apply; a newer one replaces one that is still waiting.
+    # One deploy at a time.
+    # A new one waits rather than cancelling a running apply; a newer one replaces one that is still waiting.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -68,7 +71,8 @@ jobs:
           access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
 
-      # The two steps below end the deploy early, changing nothing (the run stays green). Each sets SKIP, and every later step only runs while SKIP is unset.
+      # The two steps below end the deploy early, changing nothing (the run stays green).
+      # Each sets SKIP, and every later step only runs while SKIP is unset.
 
       # CI never recreates a torn-down stack; release.sh does.
       - name: Skip if the app is torn down
@@ -81,7 +85,9 @@ jobs:
             echo "### Deploy skipped: the app is not deployed. Run \`infra/scripts/release.sh\` to bring it up." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Docs or tests alone don't deploy. Compares the deployed commit with this one. A manual rollback skips this check.
+      # Docs or tests alone don't deploy.
+      # Compares the deployed commit with this one.
+      # A manual rollback skips this check.
       - name: Skip if nothing in the app changed
         if: env.SKIP == '' && inputs.ref == ''
         run: |
@@ -91,7 +97,8 @@ jobs:
             echo "### Nothing to deploy: no app changes since the deployed commit \`$deployed\`." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Apply exactly the saved plan. -lock-timeout waits for a local release.sh.
+      # Apply exactly the saved plan.
+      # -lock-timeout waits for a local release.sh.
       - name: Plan and apply
         id: apply
         if: env.SKIP == ''

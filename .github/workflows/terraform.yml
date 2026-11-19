@@ -1,4 +1,5 @@
-# The Terraform checks: formatting and validate for all three stacks, and the app plan with the read-only plan role. Not run on its own: ci.yml calls it on every push.
+# The Terraform checks: formatting and validate for all three stacks, and the app plan with the read-only plan role.
+# Not run on its own: ci.yml calls it on every push.
 name: Terraform
 
 on:
@@ -27,7 +28,8 @@ jobs:
       - uses: ./.github/actions/setup-terraform
       - run: infra/scripts/check-terraform.sh
 
-  # What would this commit change in the app stack? Uses the read-only plan role.
+  # What would this commit change in the app stack?
+  # Uses the read-only plan role.
   plan:
     if: vars.AWS_PLAN_ROLE_ARN != ''
     runs-on: ubuntu-latest

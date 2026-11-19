@@ -1,4 +1,8 @@
-# Inputs you can change. The defaults are the practice values. To override one, put it in terraform.tfvars (gitignored) or pass `-var name=value`. The table settings are in infra/foundation/variables.tf. `state_bucket` has no default: you must set it (see below).
+# Inputs you can change.
+# The defaults are the practice values.
+# To override one, put it in terraform.tfvars (gitignored) or pass `-var name=value`.
+# The table settings are in infra/foundation/variables.tf.
+# `state_bucket` has no default: you must set it (see below).
 
 variable "name" {
   description = "Prefix for resource names and tags. Must match the foundation stack."
@@ -60,7 +64,8 @@ variable "rate_limit_create" {
   }
 }
 
-# Off for practice. What WAF costs: "Cost" in infra/README.md.
+# Off for practice.
+# What WAF costs: "Cost" in infra/README.md.
 variable "rate_limiting" {
   description = "Rate limits (AWS WAF)."
   type        = bool
@@ -79,7 +84,8 @@ variable "system_log_level" {
   }
 }
 
-# 1024 because Lambda gives CPU in proportion to memory. At 256 MB cold requests were about twice as slow, at about the same cost per request.
+# 1024 because Lambda gives CPU in proportion to memory.
+# At 256 MB cold requests were about twice as slow, at about the same cost per request.
 variable "memory_size" {
   description = "MB of memory for the function."
   type        = number

@@ -20,7 +20,8 @@ export function createUrlService(
   tableName: string,
   newCode: GenerateCode = generateCode,
 ): UrlService {
-  // Writes the link only if the code is free. Returns false if it is taken.
+  // Writes the link only if the code is free.
+  // Returns false if it is taken.
   const putIfFree = async (code: string, longUrl: string) => {
     try {
       await db.send(
@@ -62,7 +63,8 @@ export function createUrlService(
       throw new Error("could not allocate a unique code");
     },
 
-    // The default read is cheaper but can miss an item written a moment ago. Ask again with a consistent read, so a link that was just created never answers 404.
+    // The default read is cheaper but can miss an item written a moment ago.
+    // Ask again with a consistent read, so a link that was just created never answers 404.
     async resolve(code) {
       return (await get(code, false)) ?? (await get(code, true));
     },

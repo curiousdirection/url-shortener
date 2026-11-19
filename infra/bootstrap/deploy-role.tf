@@ -35,7 +35,8 @@ locals {
   lambda_role_arn = "arn:aws:iam::${local.account_id}:role/${var.name}-lambda"
 }
 
-# Only what `terraform apply` in infra/app needs. It can update the function, its URL, its log group, the CDN and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
+# Only what `terraform apply` in infra/app needs.
+# It can update the function, its URL, its log group, the CDN and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id
@@ -85,7 +86,8 @@ resource "aws_iam_role_policy" "deploy" {
         Resource = [local.log_group_arn, "${local.log_group_arn}:*"]
       },
       ], local.cloudfront_read_statements, [
-      # The CDN: update, not create or delete. CloudFront picks the distribution's id, so it is matched by the Project tag the app stack sets.
+      # The CDN: update, not create or delete.
+      # CloudFront picks the distribution's id, so it is matched by the Project tag the app stack sets.
       {
         Effect    = "Allow"
         Action    = ["cloudfront:UpdateDistribution", "cloudfront:TagResource", "cloudfront:UntagResource"]

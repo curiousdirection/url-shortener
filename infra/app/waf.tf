@@ -1,4 +1,5 @@
-# Rate limits by IP, only when rate_limiting is true. Why: docs/decisions/0007-cdn-cloudfront.md.
+# Rate limits by IP, only when rate_limiting is true.
+# Why: docs/decisions/0007-cdn-cloudfront.md.
 
 # A web ACL for CloudFront must be in us-east-1.
 resource "aws_wafv2_web_acl" "app" {

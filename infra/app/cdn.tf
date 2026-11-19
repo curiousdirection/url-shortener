@@ -1,14 +1,17 @@
-# CloudFront in front of the function. Why: docs/decisions/0007-cdn-cloudfront.md.
+# CloudFront in front of the function.
+# Why: docs/decisions/0007-cdn-cloudfront.md.
 
 locals {
   function_url_host = trimsuffix(trimprefix(aws_lambda_function_url.app.function_url, "https://"), "/")
   origin_id         = "function-url"
 }
 
-# AWS's ready-made CloudFront policies, looked up by name. CI isn't allowed to create its own.
+# AWS's ready-made CloudFront policies, looked up by name.
+# CI isn't allowed to create its own.
 #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
 
-# For redirects: keeps each one as long as the app's Cache-Control says. It always keeps a response for at least 1 second, even one marked no-store, so /health uses the next one instead.
+# For redirects: keeps each one as long as the app's Cache-Control says.
+# It always keeps a response for at least 1 second, even one marked no-store, so /health uses the next one instead.
 data "aws_cloudfront_cache_policy" "caching_optimized" {
   name = "Managed-CachingOptimized"
 }
@@ -18,7 +21,8 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"
 }
 
-# For /api/*: passes the visitor's headers on to the function, except Host. The function URL only answers requests addressed to its own name, so CloudFront puts that in instead.
+# For /api/*: passes the visitor's headers on to the function, except Host.
+# The function URL only answers requests addressed to its own name, so CloudFront puts that in instead.
 data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
@@ -59,7 +63,8 @@ resource "aws_cloudfront_distribution" "app" {
       origin_ssl_protocols   = ["TLSv1.2"]
     }
 
-    # An extra cache layer, so each link reaches the function about once. Off for practice.
+    # An extra cache layer, so each link reaches the function about once.
+    # Off for practice.
     dynamic "origin_shield" {
       for_each = var.origin_shield_region == null ? [] : [var.origin_shield_region]
       content {
@@ -79,7 +84,8 @@ resource "aws_cloudfront_distribution" "app" {
     cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
   }
 
-  # The API, never cached. https-only, because a redirected POST can lose its body.
+  # The API, never cached.
+  # https-only, because a redirected POST can lose its body.
   ordered_cache_behavior {
     path_pattern             = "/api/*"
     target_origin_id         = local.origin_id

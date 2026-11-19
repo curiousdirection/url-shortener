@@ -4,7 +4,8 @@ import { z } from "zod";
 import { AliasTakenError, type UrlService } from "./urlService.js";
 
 const RESERVED = new Set(["api", "health"]);
-// What a code can look like: the alias rules, or the generated 7 characters. Anything else is a 404 without a database read (DynamoDB rejects keys over 2048 bytes).
+// What a code can look like: the alias rules, or the generated 7 characters.
+// Anything else is a 404 without a database read (DynamoDB rejects keys over 2048 bytes).
 const CODE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 const createSchema = z.object({
@@ -26,7 +27,8 @@ const createSchema = z.object({
     .optional(),
 });
 
-// The address the client called. Behind CloudFront, X-Forwarded-Host holds it (forwarded-host.js).
+// The address the client called.
+// Behind CloudFront, X-Forwarded-Host holds it (forwarded-host.js).
 const requestOrigin = (c: Context) => {
   const url = new URL(c.req.url);
   const forwarded = c.req.header("x-forwarded-host");

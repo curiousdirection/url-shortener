@@ -1,4 +1,6 @@
-# Values the app stack reads (with terraform_remote_state) to wire the function to this foundation. They are not secret. You can see them any time with `terraform output`.
+# Values the app stack reads (with terraform_remote_state) to wire the function to this foundation.
+# They are not secret.
+# You can see them any time with `terraform output`.
 
 # The table's name, which the function gets as TABLE_NAME.
 output "table_name" {
