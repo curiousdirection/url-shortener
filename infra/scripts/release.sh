@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the app zip and apply infra/app.
+# Build the app zip, apply infra/app, then upload the web page.
 # For the first run and releases from your machine; CI does the same on main.
 # See "Deploy" in infra/README.md.
 # Usage: infra/scripts/release.sh   (needs AWS credentials, Node and the setup in that README)
@@ -16,4 +16,9 @@ VERSION="$(infra/scripts/app-version.sh)"
 npm ci
 HASH="$(infra/scripts/build-zip.sh)"
 
+npm run web:build
+
 terraform -chdir=infra/app apply -var "app_version=$VERSION" -var "package_hash=$HASH"
+
+# After the apply, because the bucket and the CDN must exist first.
+infra/scripts/release-web.sh
