@@ -8,7 +8,7 @@ locals {
 }
 
 # AWS's ready-made CloudFront policies, looked up by name.
-# CI isn't allowed to create its own.
+# CI isn't allowed to create its own cache or origin request policies.
 #   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
 
 # For redirects and the web page's files: keeps each one as long as its Cache-Control says.
@@ -28,9 +28,42 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-# For every behaviour: adds security headers such as HSTS and nosniff to each response.
-data "aws_cloudfront_response_headers_policy" "security_headers" {
-  name = "Managed-SecurityHeadersPolicy"
+# For every behaviour: the headers of AWS's Managed-SecurityHeadersPolicy, plus a Content-Security-Policy, which the managed policy can't add.
+resource "aws_cloudfront_response_headers_policy" "security_headers" {
+  name = "${var.name}-security-headers"
+
+  security_headers_config {
+    # Strict-Transport-Security: browsers use HTTPS only, for a year.
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      override                   = false
+    }
+    # X-Content-Type-Options: browsers don't guess file types.
+    content_type_options {
+      override = true
+    }
+    # X-Frame-Options: only this site can put the page in a frame.
+    frame_options {
+      frame_option = "SAMEORIGIN"
+      override     = false
+    }
+    # Referrer-Policy: other sites see only the domain a visitor came from, not the full address.
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = false
+    }
+    # X-XSS-Protection: an old browser filter, kept to match AWS's policy.
+    xss_protection {
+      protection = true
+      mode_block = true
+      override   = false
+    }
+    # Content-Security-Policy: the page loads scripts, styles and data only from this site, and no site can put it in a frame.
+    content_security_policy {
+      content_security_policy = "default-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+      override                = true
+    }
+  }
 }
 
 # Signs every request to the function URL, so only CloudFront can call it.
@@ -100,7 +133,7 @@ resource "aws_cloudfront_distribution" "app" {
     cached_methods             = ["GET", "HEAD"]
     compress                   = true
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   # The API, never cached.
@@ -112,7 +145,7 @@ resource "aws_cloudfront_distribution" "app" {
     allowed_methods            = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods             = ["GET", "HEAD"]
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
 
     # For shortUrl (src/app.ts).
@@ -130,7 +163,7 @@ resource "aws_cloudfront_distribution" "app" {
     allowed_methods            = ["GET", "HEAD"]
     cached_methods             = ["GET", "HEAD"]
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   # The web page, cached as the Cache-Control set on each file at upload says (infra/scripts/release-web.sh).
@@ -142,7 +175,7 @@ resource "aws_cloudfront_distribution" "app" {
     cached_methods             = ["GET", "HEAD"]
     compress                   = true
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   ordered_cache_behavior {
@@ -153,7 +186,7 @@ resource "aws_cloudfront_distribution" "app" {
     cached_methods             = ["GET", "HEAD"]
     compress                   = true
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   restrictions {
