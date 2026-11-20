@@ -1,4 +1,4 @@
-# 12. Log API calls with one CloudTrail trail and alarm on the worst events
+# 13. Log API calls with one CloudTrail trail and alarm on the worst events
 
 Date: 2026-11-20. Status: accepted.
 

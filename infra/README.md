@@ -78,7 +78,7 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/foundation apply
    ```
 
-   This also creates the CloudTrail trail and its bucket, and an alarm on root use or a stopped trail ([ADR 0012](../docs/decisions/0012-cloudtrail-trail-and-alarm.md)). Check that it is logging, and that the first digest and log files arrive (within about 15 minutes):
+   This also creates the CloudTrail trail and its bucket, and an alarm on root use or a stopped trail ([ADR 0013](../docs/decisions/0013-cloudtrail-trail-and-alarm.md)). Check that it is logging, and that the first digest and log files arrive (within about 15 minutes):
 
    ```bash
    aws cloudtrail get-trail-status --name url-shortener-trail --region eu-north-1 --query '{logging: IsLogging, delivered: LatestDeliveryTime, error: LatestDeliveryError}'

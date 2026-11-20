@@ -48,7 +48,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 ### Account monitoring
 
-- **A record of API calls.** One CloudTrail trail logs the account's management events in every Region, with log file validation, into a private bucket that is encrypted, blocks public access and refuses non-TLS requests. Logs are deleted after 90 days (`infra/foundation/cloudtrail.tf`, [ADR 0012](decisions/0012-cloudtrail-trail-and-alarm.md)).
+- **A record of API calls.** One CloudTrail trail logs the account's management events in every Region, with log file validation, into a private bucket that is encrypted, blocks public access and refuses non-TLS requests. Logs are deleted after 90 days (`infra/foundation/cloudtrail.tf`, [ADR 0013](decisions/0013-cloudtrail-trail-and-alarm.md)).
 - **An email on the worst events.** An alarm on the existing alarm topic fires when the root user is used or the trail is stopped or deleted.
 - **CI can't touch the trail.** The deploy role has no CloudTrail or trail-bucket permissions, and they are explicitly denied (`infra/bootstrap/github.tf`).
 - **Known gap: nothing reads the logs.** Only those events raise an alarm; anything else is found by looking (`infra/README.md`). GuardDuty and Security Hub are blocked by the Free plan's SCP, and AWS Config isn't set up.
