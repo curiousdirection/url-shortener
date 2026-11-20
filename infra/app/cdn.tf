@@ -34,21 +34,26 @@ resource "aws_cloudfront_response_headers_policy" "security_headers" {
   name = "${var.name}-security-headers"
 
   security_headers_config {
+    # Browsers use HTTPS only, for a year.
     strict_transport_security {
       access_control_max_age_sec = 31536000
       override                   = false
     }
+    # Browsers don't guess file types.
     content_type_options {
       override = true
     }
+    # Only this site can put the page in a frame.
     frame_options {
       frame_option = "SAMEORIGIN"
       override     = false
     }
+    # Other sites see only the domain a visitor came from, not the full address.
     referrer_policy {
       referrer_policy = "strict-origin-when-cross-origin"
       override        = false
     }
+    # An old browser filter, kept to match AWS's policy.
     xss_protection {
       protection = true
       mode_block = true
