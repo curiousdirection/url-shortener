@@ -28,6 +28,11 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
+# For every behaviour: adds security headers such as HSTS and nosniff to each response.
+data "aws_cloudfront_response_headers_policy" "security_headers" {
+  name = "Managed-SecurityHeadersPolicy"
+}
+
 # Signs every request to the function URL, so only CloudFront can call it.
 resource "aws_cloudfront_origin_access_control" "app" {
   name                              = var.name
@@ -89,24 +94,26 @@ resource "aws_cloudfront_distribution" "app" {
 
   # Redirects, cached as the app's Cache-Control says.
   default_cache_behavior {
-    target_origin_id       = local.origin_id
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    target_origin_id           = local.origin_id
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   # The API, never cached.
   # https-only, because a redirected POST can lose its body.
   ordered_cache_behavior {
-    path_pattern             = "/api/*"
-    target_origin_id         = local.origin_id
-    viewer_protocol_policy   = "https-only"
-    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+    path_pattern               = "/api/*"
+    target_origin_id           = local.origin_id
+    viewer_protocol_policy     = "https-only"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
+    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
 
     # For shortUrl (src/app.ts).
     function_association {
@@ -117,33 +124,36 @@ resource "aws_cloudfront_distribution" "app" {
 
   # Never cached, so health checks reach the function.
   ordered_cache_behavior {
-    path_pattern           = "/health"
-    target_origin_id       = local.origin_id
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
+    path_pattern               = "/health"
+    target_origin_id           = local.origin_id
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
+    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   # The web page, cached as the Cache-Control set on each file at upload says (infra/scripts/release-web.sh).
   ordered_cache_behavior {
-    path_pattern           = "/index.html"
-    target_origin_id       = local.web_origin_id
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    path_pattern               = "/index.html"
+    target_origin_id           = local.web_origin_id
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   ordered_cache_behavior {
-    path_pattern           = "/assets/*"
-    target_origin_id       = local.web_origin_id
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    path_pattern               = "/assets/*"
+    target_origin_id           = local.web_origin_id
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   restrictions {
