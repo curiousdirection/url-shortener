@@ -26,6 +26,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 - **Actions pinned to commit SHAs**, so a moved tag can't change what runs.
 - **Workflows are linted.** CI runs actionlint (broken workflows) and zizmor (unsafe ones, such as injectable expressions, broad permissions and unpinned actions) on every push, and a finding fails the build (`.github/workflows/lint.yml`). Checkouts don't leave the `GITHUB_TOKEN` in `.git`, so a later step or artifact can't leak it.
+- **Secrets are scanned for.** betterleaks scans the whole git history on every push and fails the build if it finds a key (`.github/workflows/secrets.yml`). The binary is pinned by version and SHA-256, and the job has a read-only token and no AWS credentials. It reports a key only after it is committed, so a leaked key must still be revoked. GitHub's own secret scanning and push protection, which can block the push, are repository settings that aren't covered here.
 - **Locked dependencies.** `npm ci` installs exactly what `package-lock.json` says.
 - **One file deployed.** The zip holds only the bundled app, not `node_modules` or the source.
 - **Same zip for the same code.** The zip is built the same way every time, so the same code gives the same hash.
@@ -54,7 +55,6 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Dependency scanning | Known CVEs in npm packages | Dependabot alerts, `npm audit` |
 | IaC scanning | Insecure Terraform (open permissions, missing encryption) | Trivy, Checkov |
 | Static analysis | Injection and unsafe code patterns | CodeQL |
-| Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Locked action dependencies | An action we pin calling other actions that aren't pinned, so what runs can change under us | GitHub Actions workflow lock files (`.github/workflows/actions.lock`) |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
