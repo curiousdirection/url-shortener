@@ -100,9 +100,7 @@ variable "memory_size" {
   default     = 1024
 }
 
-# A cap on the cost of a flood: a code that isn't cached reaches the function, so anyone can keep it busy by asking for made-up codes.
-# Past the cap Lambda throttles, and CloudFront answers with an error, to real visitors too.
-# Lambda keeps 100 of the account's concurrency unreserved, so a cap of N needs an account quota of at least N + 100 ("Prerequisites" in infra/README.md).
+# Lambda keeps 100 of the account's concurrency unreserved, so a cap of N needs an account quota of at least N + 100.
 variable "reserved_concurrency" {
   description = "How many copies of the function may run at once."
   type        = number

@@ -13,6 +13,5 @@ rate_limiting = true
 # Origin Shield (see the variable).
 origin_shield_region = "eu-west-2"
 
-# About 20 times the average load on the function: about 1,300 requests a second (cache misses and new links) at a guessed 20 ms each keep about 25 copies busy.
-# A viral link is one code, so its spike is served from the cache.
+# About 20 times the average load: about 1,300 requests a second miss the cache and, at a guessed 20 ms each, keep about 25 copies busy.
 reserved_concurrency = 500
