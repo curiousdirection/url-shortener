@@ -25,7 +25,6 @@ resource "aws_sns_topic_subscription" "alarm_email" {
   endpoint  = var.alarm_email
 }
 
-# Hono turns an exception in a route into a 500 response, which Lambda counts as a success, so this alarm doesn't see app 500s.
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   alarm_name          = "${var.name}-lambda-errors"
   alarm_description   = "The function failed at least ${local.error_min_count} invocations and more than ${local.error_rate_percentage}% of them in a 5-minute period, in 2 of the last 3 periods."
