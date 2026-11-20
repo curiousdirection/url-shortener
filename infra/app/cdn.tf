@@ -28,11 +28,7 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-# For every behaviour: adds security headers to the responses.
-# It sets Strict-Transport-Security (max-age=31536000), X-Content-Type-Options (nosniff), X-Frame-Options (SAMEORIGIN), Referrer-Policy (strict-origin-when-cross-origin) and X-XSS-Protection (1; mode=block).
-# Only X-Content-Type-Options replaces what the origin sends; for the others the origin's own header wins.
-# It has no Content-Security-Policy, and a custom policy would need a permission CI doesn't have.
-#   https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-response-headers-policies.html
+# AWS's managed one, since the deploy role can't create a policy of its own.
 data "aws_cloudfront_response_headers_policy" "security_headers" {
   name = "Managed-SecurityHeadersPolicy"
 }

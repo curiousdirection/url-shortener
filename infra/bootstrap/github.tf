@@ -37,19 +37,14 @@ locals {
       Action   = "cloudfront:ListTagsForResource"
       Resource = ["${local.cloudfront_arn}:distribution/*", local.cdn_function_arn]
     },
-    # AWS's ready-made cache and origin request policies, which cdn.tf looks up by name.
+    # AWS's ready-made cache, origin request and response headers policies, looked up by name.
     {
       Effect = "Allow"
       Action = [
         "cloudfront:ListCachePolicies", "cloudfront:GetCachePolicy",
         "cloudfront:ListOriginRequestPolicies", "cloudfront:GetOriginRequestPolicy",
+        "cloudfront:ListResponseHeadersPolicies", "cloudfront:GetResponseHeadersPolicy",
       ]
-      Resource = "*"
-    },
-    # AWS's ready-made response headers policy, which cdn.tf looks up by name.
-    {
-      Effect   = "Allow"
-      Action   = ["cloudfront:ListResponseHeadersPolicies", "cloudfront:GetResponseHeadersPolicy"]
       Resource = "*"
     },
     # The web ACL, in us-east-1.
