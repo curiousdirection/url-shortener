@@ -33,7 +33,7 @@ All three states are in the S3 bucket.
 
 Do these once, in order, on a commit that is on `main`.
 
-1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. Only runs that your GitHub account triggers may start the runner, so put its numeric ID in `infra/bootstrap/terraform.tfvars` first (`deployer_github_id = "..."`; there is no default; get the ID with `gh api users/<your login> --jq .id`). Create the GitHub connection first and approve it, because the runner's webhook can't be made through a pending connection.
+1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. Create the GitHub connection first and approve it, because the runner's webhook can't be made through a pending connection.
 
    ```bash
    printf 'terraform {\n  backend "local" {}\n}\n' > infra/bootstrap/backend_override.tf
@@ -106,7 +106,7 @@ A change to CloudFront takes a few minutes to reach every location; CI's `/healt
 
 ### If the deploy job never starts
 
-It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI` triggered by the account in `deployer_github_id`, so a merge or a rollback by any other account starts none. Check the runner project's webhook in the CodeBuild console, that the connection is still approved, and the webhook's recent deliveries (the repository's Settings > Webhooks, the `workflow_job` event). In the payload, `sender.id` must equal `deployer_github_id`; if GitHub sets another account, change `deployer_github_id` or the filter in `infra/bootstrap/runner.tf` and apply the bootstrap.
+It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI`. Check the runner project's webhook in the CodeBuild console and that the connection is still approved.
 
 **Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
 
@@ -139,7 +139,7 @@ terraform -chdir=infra/foundation apply
 
 For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out. From step 2 until the merge, deploys can't sign in, so go straight through.
 
-1. **Set `deployer_github_id` and create the connection**, as in step 1 of "Set up and first run": put the ID in `infra/bootstrap/terraform.tfvars`, run `terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github`, then approve it in the console. Also set "Require approval for all external contributors" (step 3 there).
+1. **Create the connection**, as in step 1 of "Set up and first run": run `terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github`, then approve it in the console. Also set "Require approval for all external contributors" (step 3 there).
 2. **Delete the two users' access keys.** Terraform can't delete a user that has one, so this must come before the apply that removes the users (names are for the default `name`).
 
    ```bash

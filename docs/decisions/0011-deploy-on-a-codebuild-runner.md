@@ -15,7 +15,7 @@ CodeBuild can host GitHub Actions runners: it starts a runner in our account for
 - **One deploy job** does the function and then the page, so a deploy uses one runner start.
 - **No IAM users and no access keys.** CodeBuild reaches GitHub through a CodeConnections connection (the AWS GitHub App), which a person approves once.
 - **No plan in CI.** The plan role, its user and the `plan` job are gone; the Terraform check (formatting and validate, no credentials) stays. The deploy's plan is in the run's summary, and you can plan from your machine.
-- **Only the deployer's runs start the runner.** The repository is public, and CodeBuild's webhook can't tell a fork PR's workflow named "CI" from ours by name alone. So the webhook also filters on the triggering account's ID (`deployer_github_id`), and GitHub is set to require approval for all external contributors' workflow runs. How they protect the runner: "Access to AWS" in [docs/security.md](../security.md).
+- **Fork PRs need approval to run.** The repository is public, and CodeBuild's webhook can't tell a fork PR's workflow named "CI" from ours. So GitHub is set to require approval for all external contributors' workflow runs. We considered also filtering on the triggering account's ID, but anyone with write access can change `main` anyway, and the filter would have stopped their merges from deploying. How this protects the runner: "Access to AWS" in [docs/security.md](../security.md).
 - **A watchdog cancels a deploy that no runner picks up**, because a job waiting for a runner has no timeout and would hold up later deploys.
 - **Deploy is a job of CI, not a separate workflow.** It needs the checks and runs only on `main`. The separate workflow existed to keep the AWS keys out of the test workflow, and with no secrets there is nothing to isolate. It also let a new push cancel a run, because the deploy was a different workflow; now CI queues runs on `main` instead of cancelling them, so an apply is never cancelled and deploys go in the order they were triggered.
 - **Tests run once**, on GitHub-hosted runners. A rollback skips them, so a broken `main` can't block it.
@@ -28,8 +28,7 @@ CodeBuild can host GitHub Actions runners: it starts a runner in our account for
 
 ## Consequences
 
-- **CodeBuild can filter runner jobs by workflow name and triggering account, not by branch.** A workflow named "CI" on any branch that the deployer triggers could claim the runner and get the deploy role.
-- **The account filter is unproven.** CodeBuild matches the webhook payload's `sender.id`, and we haven't seen which account GitHub puts there for a job started by a push or a manual run. A merge by anyone but the deployer starts no runner. A wrong ID leaves the job queued until the watchdog cancels it, so the first deploys must be checked ("If the deploy job never starts" in [infra/README.md](../../infra/README.md)).
+- **CodeBuild can filter runner jobs by workflow name, not by branch.** A workflow named "CI" on any branch could claim the runner and get the deploy role.
 - **`environment: production` is only GitHub's deployment history now**, not a gate.
 - **Free tier:** 100 build minutes a month on the small instance; a deploy takes a few minutes, longer when CloudFront changes.
 - **A one-time approval** of the connection in the console, which Terraform can't do.
