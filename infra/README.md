@@ -148,6 +148,13 @@ terraform -chdir=infra/foundation apply
 
 It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI`. Check the runner project's webhook in the CodeBuild console and that the connection is still approved.
 
+## Review a Dependabot pull request
+
+1. Read the release notes the PR links, and check that only `package.json`, `package-lock.json`, `.github/` or a `.terraform.lock.hcl` file changed.
+2. For an action, check that the SHA still sits next to a version comment.
+3. For a Terraform provider, run `terraform -chdir=infra/<stack> plan` and read it before merging. CI only checks the formatting and configuration.
+4. Merge when CI passes. A merge that changes the zip or the page deploys like any other.
+
 ## Rollback
 
 A deploy switches all traffic to the new code at once. If the new code is broken, the CI run fails its `/health` check, but the broken code keeps running until you roll back. Either:
