@@ -2,6 +2,7 @@
 # All workflows pin actions to commit SHAs.
 # To update one, change the SHA and the version comment together:
 #   git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'
+# Renaming this workflow stops deploys: the runner only starts for a workflow named CI.
 name: CI
 
 on:

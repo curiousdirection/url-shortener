@@ -61,7 +61,8 @@ resource "aws_codebuild_webhook" "runner" {
       pattern = "^CI$"
     }
     filter {
-      type    = "ACTOR_ACCOUNT_ID"
+      type = "ACTOR_ACCOUNT_ID"
+      # Must stay anchored, or other accounts' IDs can match.
       pattern = "^${var.deployer_github_id}$"
     }
   }
