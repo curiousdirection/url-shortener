@@ -1,0 +1,184 @@
+<!doctype html>
+<!-- docs/architecture.svg draws the same diagram for the README; change both together. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>URL Shortener Architecture</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --text: #1f2328;
+    --muted: #59636e;
+    --box: #f6f8fa;
+    --border: #57606a;
+    --group: #8c959f;
+    --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --text: #e6edf3;
+      --muted: #9198a1;
+      --box: #161b22;
+      --border: #8b949e;
+      --group: #6e7681;
+      --line: #8b949e;
+    }
+  }
+  body {
+    margin: 0;
+    padding: 2rem 16px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.4 system-ui, sans-serif;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 1.5rem; }
+  code { font: 600 0.95em ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .diagram {
+    display: grid;
+    gap: 0.25rem 0.5rem;
+    align-items: center;
+    max-width: 72rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-areas:
+      "client client"
+      "e1 e1"
+      "cdn cdn"
+      "e2 e3"
+      "s3 lambda"
+      ". e4"
+      ". ddb";
+  }
+
+  .node {
+    background: var(--box);
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    text-align: center;
+  }
+  .node small { display: block; color: var(--muted); font-size: 0.8rem; }
+  .pill { border-radius: 999px; justify-self: center; padding-inline: 1.5rem; }
+  .store { border-radius: 50% / 0.75rem; padding-block: 0.9rem; }
+  .group {
+    border: 1.5px dashed var(--group);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem 0.75rem;
+  }
+  .stretch { align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+  .top { align-self: start; }
+  .caption { font-size: 0.8rem; color: var(--muted); text-align: center; margin-bottom: 0.5rem; }
+
+  /* Edges point down by default; on wide screens the ones between columns point right. */
+  .edge {
+    display: flex;
+    justify-content: center;
+    gap: 1.25rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .flow { display: flex; align-items: center; gap: 0.4rem; }
+  .label { order: 1; }
+  .shaft {
+    position: relative;
+    align-self: stretch;
+    min-height: 2.25rem;
+    border-left: 2px solid var(--line);
+  }
+  .shaft::after {
+    content: "";
+    position: absolute;
+    left: -7px;
+    bottom: -1px;
+    border: 6px solid transparent;
+    border-bottom: 0;
+    border-top: 9px solid var(--line);
+  }
+  .back .shaft { border-left-style: dashed; }
+  .back .shaft::after {
+    bottom: auto;
+    top: -1px;
+    border-top: 0;
+    border-bottom: 9px solid var(--line);
+  }
+
+  @media (min-width: 70rem) {
+    .diagram {
+      gap: 1.5rem 0;
+      grid-template-columns: 6rem minmax(7rem, 1fr) 10rem minmax(9rem, 1.2fr) 16rem minmax(7rem, 1fr) 11rem;
+      grid-template-areas:
+        "client e1 cdn e2 s3 . ."
+        "client e1 cdn e3 lambda e4 ddb";
+    }
+    .top { align-self: center; }
+    .edge:not(.v) { flex-direction: column; gap: 0.75rem; padding-inline: 0.25rem; }
+    .edge:not(.v) .flow { flex-direction: column; align-items: stretch; gap: 0.2rem; text-align: center; }
+    .edge:not(.v) .label { order: 0; }
+    .edge:not(.v) .shaft { min-height: 0; border-left: 0; border-top: 2px solid var(--line); }
+    .edge:not(.v) .shaft::after {
+      left: auto;
+      right: -1px;
+      bottom: auto;
+      top: -7px;
+      border: 6px solid transparent;
+      border-right: 0;
+      border-left: 9px solid var(--line);
+    }
+    .edge:not(.v) .back .shaft { border-top-style: dashed; }
+    .edge:not(.v) .back .shaft::after {
+      right: auto;
+      left: -1px;
+      border-left: 0;
+      border-right: 9px solid var(--line);
+    }
+  }
+</style>
+</head>
+<body>
+<h1>URL Shortener architecture</h1>
+
+<div class="diagram">
+  <div class="node pill" style="grid-area: client">Client</div>
+
+  <div class="edge" style="grid-area: e1">
+    <div class="flow"><span class="label">GET /<br>POST /api/urls<br>GET /:code</span><span class="shaft"></span></div>
+  </div>
+
+  <div class="node stretch" style="grid-area: cdn">CloudFront<small>caches redirects; rate limits (AWS WAF) at full scale</small></div>
+
+  <div class="edge" style="grid-area: e2">
+    <div class="flow"><span class="label">signed; only on a cache miss</span><span class="shaft"></span></div>
+  </div>
+
+  <div class="node store top" style="grid-area: s3">S3<small>the web page</small></div>
+
+  <div class="edge" style="grid-area: e3">
+    <div class="flow"><span class="label">signed call; only on a cache miss for GET</span><span class="shaft"></span></div>
+    <div class="flow back"><span class="shaft"></span><span class="label">201 / 409 / 302 / 404</span></div>
+  </div>
+
+  <div class="group" style="grid-area: lambda">
+    <div class="caption">Lambda function (function URL, HTTPS)</div>
+    <div class="node"><code>app.ts</code><small>routes + zod validation</small></div>
+    <div class="edge v"><div class="flow"><span class="shaft"></span></div></div>
+    <div class="node"><code>urlService.ts</code><small>create / resolve</small></div>
+    <div class="edge v"><div class="flow"><span class="label">no alias</span><span class="shaft"></span></div></div>
+    <div class="node"><code>codeGenerator.ts</code><small>7 random base62 characters</small></div>
+  </div>
+
+  <div class="edge" style="grid-area: e4">
+    <div class="flow"><span class="label">PutItem if code is free</span><span class="shaft"></span></div>
+    <div class="flow"><span class="label">GetItem</span><span class="shaft"></span></div>
+  </div>
+
+  <div class="group" style="grid-area: ddb">
+    <div class="caption">DynamoDB (on-demand)</div>
+    <div class="node store"><code>urls</code><small>code PK, long_url</small></div>
+  </div>
+</div>
+</body>
+</html>
