@@ -9,7 +9,7 @@ Internet -> CloudFront (*.cloudfront.net; AWS WAF rate limits at full scale) -> 
 
 CloudFront is the only way in: the function URL and the bucket refuse unsigned calls.
 
-A push to `main` that changes the app is deployed by GitHub Actions, on a runner that CodeBuild hosts in this account, so CI holds no AWS keys. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md) and [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md).
+A push to `main` that changes the app is deployed by CI (GitHub Actions); its deploy job runs on a runner that CodeBuild hosts in this account. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md) and [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md).
 
 ## The three stacks
 
@@ -58,12 +58,12 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/app init -backend-config=../backend.hcl
    ```
 
-3. **Set up GitHub.** Under Settings > Actions > General, set "Fork pull request workflows from outside collaborators" to "Require approval for all external contributors" (the default only asks first-time contributors). Under Settings > Environments, create `production` and limit its deployment branches to `main`. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
+3. **Set up GitHub.** Under Settings > Actions > General, set "Fork pull request workflows from outside collaborators" to "Require approval for all external contributors" (the default only asks first-time contributors). Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
 
-```bash
-gh variable set AWS_REGION --body eu-north-1
-gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap output -raw state_bucket)"
-```
+   ```bash
+   gh variable set AWS_REGION --body eu-north-1
+   gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap output -raw state_bucket)"
+   ```
 
 4. **Apply the foundation.** Read the plan first. It takes a few seconds.
 
@@ -81,13 +81,13 @@ gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap outpu
 
    `release.sh` also uploads the web page.
 
-6. **Run CI once by hand** (Actions > CI > Run workflow, on `main`, `ref` empty). It runs the checks and then deploys, so it shows that the runner starts and can sign in. A deploy that a merge to `main` starts is a different event, so check the first one of those too: see [If the deploy job never starts](#if-the-deploy-job-never-starts).
+6. **Run CI once by hand** (Actions > CI > Run workflow, on `main`, `ref` empty). It runs the checks and then deploys, so it shows that the runner starts and can sign in. If it doesn't start, see [If the deploy job never starts](#if-the-deploy-job-never-starts).
 
 If the role is refused a `lambda:`, `logs:` or `s3:` action, add it in `infra/bootstrap/deploy-role.tf` and apply the bootstrap again: the permission list hasn't been run against a real account yet.
 
 ## Change the bootstrap
 
-CI never applies the bootstrap, so you do, after any change to its `.tf` files. 
+CI never applies the bootstrap, so you do, after any change to its `.tf` files.
 
 ```bash
 terraform -chdir=infra/bootstrap plan
@@ -103,10 +103,6 @@ The GitHub settings stay as they are.
 **Web page changes** (`web/`): merge to `main`. After the app deploy, CI uploads the page it built with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
 
 A change to CloudFront takes a few minutes to reach every location; CI's `/health` check runs after that.
-
-### If the deploy job never starts
-
-It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI`. Check the runner project's webhook in the CodeBuild console and that the connection is still approved.
 
 **Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
 
@@ -135,6 +131,10 @@ terraform -chdir=infra/foundation plan
 terraform -chdir=infra/foundation apply
 ```
 
+### If the deploy job never starts
+
+It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI`. Check the runner project's webhook in the CodeBuild console and that the connection is still approved.
+
 ## Move an existing setup off access keys
 
 For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out. From step 2 until the merge, deploys can't sign in, so go straight through.
@@ -157,7 +157,7 @@ For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-
    ```
 
 4. **Merge** the change to `main`. The old Deploy workflow can't sign in any more, so the merge is what brings deploys back.
-5. **Run CI once by hand** (Actions > CI > Run workflow, on `main`, `ref` empty) and check that a runner starts. Then check the deploy after the next merge to `main` does too. If one doesn't, see [If the deploy job never starts](#if-the-deploy-job-never-starts).
+5. **Check that the merge's CI run deploys:** its `deploy` job gets a runner and passes. If it doesn't start, see [If the deploy job never starts](#if-the-deploy-job-never-starts).
 6. **Delete the old GitHub settings.**
 
    ```bash
@@ -174,7 +174,7 @@ For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-
 A deploy switches all traffic to the new code at once. If the new code is broken, the CI run fails its `/health` check, but the broken code keeps running until you roll back. Either:
 
 - **Revert the bad commit on `main`.** CI tests and deploys the revert like any other change.
-- **Redeploy an earlier commit.** Run CI by hand (Actions > CI > Run workflow, on `main`) and set `ref` to that commit. It must be on `main` and from after the move to Lambda; the workflow refuses commits from other branches. A rollback skips the tests, so a broken `main` can't block it.
+- **Redeploy an earlier commit.** Run CI by hand (Actions > CI > Run workflow, on `main`) and set `ref` to that commit. It must be on `main` and from after the move to a CodeBuild runner ([ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md)), because older commits' scripts expect the access keys; the workflow refuses commits from other branches. A rollback skips the tests, so a broken `main` can't block it.
 
 A rollback changes the code, not the links in the table. So a change to how links are stored must still work with the previous code.
 
@@ -205,7 +205,7 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. The web bucket and the invalidations on each release (the first 1,000 paths a month are free) cost about $0. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. The web bucket and the invalidations on each release (the first 1,000 paths a month are free) cost about $0. CodeBuild's free tier covers 100 build minutes a month on the small instance, and a deploy takes a few minutes, longer when CloudFront changes. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
 - **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
