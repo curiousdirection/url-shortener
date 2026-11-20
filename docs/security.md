@@ -28,6 +28,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 - **Locked dependencies.** `npm ci` installs exactly what `package-lock.json` says.
 - **One file deployed.** The zip holds only the bundled app, not `node_modules` or the source.
 - **Same zip for the same code.** The zip is built the same way every time, so the same code gives the same hash.
+- **Secret scanning.** The `Secrets` workflow runs gitleaks over the whole git history on every push and fails if it finds a key (`.github/workflows/secrets.yml`). The binary is pinned by version and checksum, and the job has no AWS credentials. It only reports a key after it is committed, so a leaked key must still be revoked. GitHub secret scanning and push protection, which also block the push, are repository settings and are pending the owner ([infra/README.md](../infra/README.md#secret-scanning)).
 
 ### Network and data
 
@@ -53,7 +54,6 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Dependency scanning | Known CVEs in npm packages | Dependabot alerts, `npm audit` |
 | IaC scanning | Insecure Terraform (open permissions, missing encryption) | Trivy, Checkov |
 | Static analysis | Injection and unsafe code patterns | CodeQL |
-| Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
 | Workflow linting | Broken or unsafe GitHub Actions | actionlint, zizmor |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |

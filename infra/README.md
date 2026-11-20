@@ -157,6 +157,12 @@ A deploy switches all traffic to the new code at once. If the new code is broken
 
 A rollback changes the code, not the links in the table. So a change to how links are stored must still work with the previous code.
 
+## Secret scanning
+
+The `Secrets` workflow scans the whole history with gitleaks on every push. If it fails, revoke the key first, then remove it from the history, or for a false positive add a narrow allowlist in a `.gitleaks.toml` at the repo root.
+
+GitHub's own scanning is switched on in the repository's Settings > Advanced Security: enable "Secret Protection" (secret scanning), then "Push protection" under it. Both are free on public repositories.
+
 ## Tear down
 
 App first, then the foundation (the function uses the foundation's role):
