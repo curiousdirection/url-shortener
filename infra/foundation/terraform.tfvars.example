@@ -1,0 +1,6 @@
+# Your settings for this stack: copy to terraform.tfvars (gitignored) and fill in.
+# The other inputs and their defaults are in infra/foundation/variables.tf.
+
+alarm_email = "you@example.com"
+
+# region = "eu-north-1"
