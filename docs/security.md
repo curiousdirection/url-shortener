@@ -54,6 +54,5 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
 | Workflow linting | Broken or unsafe GitHub Actions | actionlint, zizmor |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
-| Branch protection | Unreviewed or unchecked code reaching `main` | GitHub settings: require a pull request and passing checks |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
-| Account monitoring | Suspicious API calls or access | CloudTrail, GuardDuty |
+| Account monitoring | Suspicious API calls or access | CloudTrail, AWS Config (the Free plan's SCP blocks GuardDuty and Security Hub) |
