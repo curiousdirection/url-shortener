@@ -99,3 +99,15 @@ variable "memory_size" {
   type        = number
   default     = 1024
 }
+
+# Null for practice: Lambda only reserves concurrency that leaves at least 100 of the account's limit unreserved, and this account's limit is 10.
+variable "reserved_concurrency" {
+  description = "How many copies of the function may run at once; null leaves it to the account's Lambda limit."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.reserved_concurrency == null ? true : var.reserved_concurrency >= 1
+    error_message = "reserved_concurrency must be null or at least 1; 0 would stop the function."
+  }
+}
