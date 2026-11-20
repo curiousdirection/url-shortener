@@ -28,7 +28,7 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-# AWS's managed one, since the deploy role can't create a policy of its own.
+# For every behaviour: adds security headers such as HSTS and nosniff to each response.
 data "aws_cloudfront_response_headers_policy" "security_headers" {
   name = "Managed-SecurityHeadersPolicy"
 }
