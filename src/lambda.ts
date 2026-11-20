@@ -16,4 +16,4 @@ export const toLambdaHandler = (app: Hono) => {
 };
 
 // Created once per Lambda instance, not per request, so later requests reuse the DynamoDB client and its open connection.
-export const handler = toLambdaHandler(buildApp(createUrlService(createDb(), config.tableName)));
+export const handler = toLambdaHandler(buildApp(createUrlService(createDb(), config.tableName), { blockedDomains: config.blockedDomains }));

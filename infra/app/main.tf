@@ -49,7 +49,8 @@ resource "aws_lambda_function" "app" {
 
   environment {
     variables = {
-      TABLE_NAME = local.foundation.table_name
+      TABLE_NAME      = local.foundation.table_name
+      BLOCKED_DOMAINS = join(",", var.blocked_domains)
     }
   }
 

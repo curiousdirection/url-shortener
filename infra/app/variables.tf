@@ -101,6 +101,12 @@ variable "memory_size" {
 }
 
 # Null for practice: Lambda only reserves concurrency that leaves at least 100 of the account's limit unreserved, and this account's limit is 10.
+variable "blocked_domains" {
+  description = "Domains (and their subdomains) that links may not point at, e.g. [\"bad.example\"]. Checked when a link is created, so it doesn't affect existing links."
+  type        = list(string)
+  default     = []
+}
+
 variable "reserved_concurrency" {
   description = "How many copies of the function may run at once; null leaves it to the account's Lambda limit."
   type        = number
