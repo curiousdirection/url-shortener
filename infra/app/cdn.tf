@@ -28,37 +28,37 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-# For every behaviour: AWS's Managed-SecurityHeadersPolicy headers plus a Content-Security-Policy, which the managed one can't be extended with.
-# The override flags match the managed policy, except that the CSP replaces any the origin sends.
+# For every behaviour: the headers of AWS's Managed-SecurityHeadersPolicy, plus a Content-Security-Policy, which the managed policy can't add.
 resource "aws_cloudfront_response_headers_policy" "security_headers" {
   name = "${var.name}-security-headers"
 
   security_headers_config {
-    # Browsers use HTTPS only, for a year.
+    # Strict-Transport-Security: browsers use HTTPS only, for a year.
     strict_transport_security {
       access_control_max_age_sec = 31536000
       override                   = false
     }
-    # Browsers don't guess file types.
+    # X-Content-Type-Options: browsers don't guess file types.
     content_type_options {
       override = true
     }
-    # Only this site can put the page in a frame.
+    # X-Frame-Options: only this site can put the page in a frame.
     frame_options {
       frame_option = "SAMEORIGIN"
       override     = false
     }
-    # Other sites see only the domain a visitor came from, not the full address.
+    # Referrer-Policy: other sites see only the domain a visitor came from, not the full address.
     referrer_policy {
       referrer_policy = "strict-origin-when-cross-origin"
       override        = false
     }
-    # An old browser filter, kept to match AWS's policy.
+    # X-XSS-Protection: an old browser filter, kept to match AWS's policy.
     xss_protection {
       protection = true
       mode_block = true
       override   = false
     }
+    # Content-Security-Policy: the page loads scripts, styles and data only from this site, and no site can put it in a frame.
     content_security_policy {
       content_security_policy = "default-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
       override                = true

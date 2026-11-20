@@ -30,7 +30,8 @@ locals {
 }
 
 # Only what `terraform apply` in infra/app needs.
-# It can update the function, its URL, its log group, the CDN, its web bucket, its access logs and the web ACL but not create or delete them (it can create the CDN's response headers policy), so a change that would replace one fails in CI instead of taking the app down.
+# It can update the function, its URL, its log group, the CDN, its web bucket, its access logs and the web ACL but not create or delete them, so a change that would replace one fails in CI instead of taking the app down.
+# The exception is the CDN's response headers policy, which it can create.
 resource "aws_iam_role_policy" "deploy" {
   name = "deploy-app-stack"
   role = aws_iam_role.deploy.id
@@ -117,7 +118,7 @@ resource "aws_iam_role_policy" "deploy" {
         Action   = "cloudfront:UpdateOriginAccessControl"
         Resource = "${local.cloudfront_arn}:origin-access-control/*"
       },
-      # CloudFront picks the policy's id, and creating can't be limited to a resource.
+      # AWS can't limit this permission to one policy, so it allows creating any response headers policy in the account.
       { Effect = "Allow", Action = "cloudfront:CreateResponseHeadersPolicy", Resource = "*" },
       {
         Effect   = "Allow"
