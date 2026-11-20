@@ -2,7 +2,7 @@
 # With `init`, it also runs `terraform init` for infra/app, using the job's AWS_REGION and TF_STATE_BUCKET and the AWS credentials in the job's environment.
 # It handles no credentials itself: the deploy job's come from the CodeBuild runner's service role.
 # Run actions/checkout first.
-# Used by terraform.yml and deploy.yml.
+# Used by terraform.yml and ci.yml.
 name: Set up Terraform
 description: Install Terraform; with init, also init infra/app.
 

@@ -1,9 +1,9 @@
-# The CodeBuild project that hosts the runner for the deploy job of .github/workflows/deploy.yml.
+# The CodeBuild project that hosts the runner for the deploy job of .github/workflows/ci.yml.
 # CodeBuild starts one runner per queued job, and the job gets the deploy role's credentials from the project's service role, so CI holds no AWS keys.
 # Why: docs/decisions/0011-deploy-on-a-codebuild-runner.md.
 
 locals {
-  # The name is also in the `runs-on` of .github/workflows/deploy.yml.
+  # The name is also in the `runs-on` of .github/workflows/ci.yml.
   runner_name = "${var.name}-deploy"
   # Built from the name, not from the project, because the deploy role's trust policy needs it and the project needs the role.
   runner_project_arn = "arn:aws:codebuild:${var.region}:${local.account_id}:project/${local.runner_name}"
@@ -23,7 +23,7 @@ resource "aws_cloudwatch_log_group" "runner" {
 
 resource "aws_codebuild_project" "runner" {
   name          = local.runner_name
-  description   = "Runs the deploy job of .github/workflows/deploy.yml"
+  description   = "Runs the deploy job of .github/workflows/ci.yml"
   service_role  = aws_iam_role.deploy.arn
   build_timeout = 60 # minutes, more than the job's timeout-minutes, so the job times out first
 
@@ -57,7 +57,7 @@ resource "aws_codebuild_project" "runner" {
   }
 }
 
-# Starts a runner for each queued job of a workflow named "Deploy" that the deployer's GitHub account triggered.
+# Starts a runner for each queued job of a workflow named "CI" that the deployer's GitHub account triggered.
 # CodeBuild can't filter a runner job by branch: see "Access to AWS" in docs/security.md.
 resource "aws_codebuild_webhook" "runner" {
   project_name = aws_codebuild_project.runner.name
@@ -70,7 +70,7 @@ resource "aws_codebuild_webhook" "runner" {
     }
     filter {
       type    = "WORKFLOW_NAME"
-      pattern = "^Deploy$"
+      pattern = "^CI$"
     }
     # Matches the `id` of the webhook payload's `sender`:
     # https://docs.aws.amazon.com/codebuild/latest/userguide/github-webhook.html

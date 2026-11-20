@@ -81,7 +81,7 @@ gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap outpu
 
    `release.sh` also uploads the web page.
 
-6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that the runner starts and can sign in. The first deploy after a merge to `main` is a different path (the CI run starts it), so check that one too: see "If the Deploy job never starts".
+6. **Run CI once by hand** (Actions > CI > Run workflow, on `main`, `ref` empty). It runs the checks and then deploys, so it shows that the runner starts and can sign in. A deploy that a merge to `main` starts is a different event, so check the first one of those too: see [If the deploy job never starts](#if-the-deploy-job-never-starts).
 
 If the role is refused a `lambda:`, `logs:` or `s3:` action, add it in `infra/bootstrap/deploy-role.tf` and apply the bootstrap again: the permission list hasn't been run against a real account yet.
 
@@ -98,13 +98,15 @@ The GitHub settings stay as they are.
 
 ## Deploy
 
-**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it: a `build` job on GitHub's runners makes the zip and the page, then a `deploy` job on the CodeBuild runner applies and uploads them. Its logs are also in the `/aws/codebuild/url-shortener-deploy` log group. If the `deploy` job never starts, check the webhook of the `url-shortener-deploy` CodeBuild project and that the connection is still approved. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
+**App changes:** merge to `main`. Once its checks pass, CI ships it: a `build` job on GitHub's runners makes the zip and the page, then a `deploy` job on the CodeBuild runner applies and uploads them. Its logs are also in the `/aws/codebuild/url-shortener-deploy` log group. If the `deploy` job never starts, see [If the deploy job never starts](#if-the-deploy-job-never-starts). Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
 
-**Web page changes** (`web/`): merge to `main`. After the app deploy, the Deploy workflow uploads the page it built with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
+**Web page changes** (`web/`): merge to `main`. After the app deploy, CI uploads the page it built with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
 
-**If the Deploy job never starts:** it waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `Deploy` triggered by the account in `deployer_github_id`. Check the runner project's webhook in the CodeBuild console, that the connection is still approved, and the webhook's recent deliveries (the repository's Settings > Webhooks, the `workflow_job` event). In the payload, `sender.id` must equal `deployer_github_id`; GitHub may set it to another account for a run that CI started rather than a person, in which case change `deployer_github_id` or the filter in `infra/bootstrap/runner.tf` and apply the bootstrap.
+A change to CloudFront takes a few minutes to reach every location; CI's `/health` check runs after that.
 
-A change to CloudFront takes a few minutes to reach every location; the Deploy workflow's `/health` check runs after that.
+### If the deploy job never starts
+
+It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI` triggered by the account in `deployer_github_id`, so a merge or a rollback by any other account starts none. Check the runner project's webhook in the CodeBuild console, that the connection is still approved, and the webhook's recent deliveries (the repository's Settings > Webhooks, the `workflow_job` event). In the payload, `sender.id` must equal `deployer_github_id`; if GitHub sets another account, change `deployer_github_id` or the filter in `infra/bootstrap/runner.tf` and apply the bootstrap.
 
 **Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
 
@@ -135,7 +137,7 @@ terraform -chdir=infra/foundation apply
 
 ## Move an existing setup off access keys
 
-For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out. From step 2 until the merge, Deploy can't sign in, so go straight through.
+For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out. From step 2 until the merge, deploys can't sign in, so go straight through.
 
 1. **Set `deployer_github_id` and create the connection**, as in step 1 of "Set up and first run": put the ID in `infra/bootstrap/terraform.tfvars`, run `terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github`, then approve it in the console. Also set "Require approval for all external contributors" (step 3 there).
 2. **Delete the two users' access keys.** Terraform can't delete a user that has one, so this must come before the apply that removes the users (names are for the default `name`).
@@ -154,8 +156,8 @@ For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-
    terraform -chdir=infra/bootstrap apply
    ```
 
-4. **Merge** the change to `main`. The old `deploy.yml` can't sign in any more, so the merge is what brings deploys back.
-5. **Run Deploy once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) and check that a runner starts. Then check the deploy that CI starts after the next merge to `main` does too. Both are described in "If the Deploy job never starts".
+4. **Merge** the change to `main`. The old Deploy workflow can't sign in any more, so the merge is what brings deploys back.
+5. **Run CI once by hand** (Actions > CI > Run workflow, on `main`, `ref` empty) and check that a runner starts. Then check the deploy after the next merge to `main` does too. If one doesn't, see [If the deploy job never starts](#if-the-deploy-job-never-starts).
 6. **Delete the old GitHub settings.**
 
    ```bash
@@ -169,10 +171,10 @@ For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-
 
 ## Rollback
 
-A deploy switches all traffic to the new code at once. If the new code is broken, the Deploy run fails its `/health` check, but the broken code keeps running until you roll back. Either:
+A deploy switches all traffic to the new code at once. If the new code is broken, the CI run fails its `/health` check, but the broken code keeps running until you roll back. Either:
 
 - **Revert the bad commit on `main`.** CI tests and deploys the revert like any other change.
-- **Redeploy an earlier commit.** Run the Deploy workflow by hand and set `ref` to that commit. It must be on `main` and from after the move to Lambda; the workflow refuses commits from other branches.
+- **Redeploy an earlier commit.** Run CI by hand (Actions > CI > Run workflow, on `main`) and set `ref` to that commit. It must be on `main` and from after the move to Lambda; the workflow refuses commits from other branches. A rollback skips the tests, so a broken `main` can't block it.
 
 A rollback changes the code, not the links in the table. So a change to how links are stored must still work with the previous code.
 

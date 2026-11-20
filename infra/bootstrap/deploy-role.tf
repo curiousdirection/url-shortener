@@ -1,4 +1,4 @@
-# The deploy role, used by .github/workflows/deploy.yml to apply infra/app.
+# The deploy role, used by the deploy job of .github/workflows/ci.yml to apply infra/app.
 # Only the CodeBuild runner project (infra/bootstrap/runner.tf) can assume it, and its deploy job gets the credentials from the project's service role.
 
 resource "aws_iam_role" "deploy" {

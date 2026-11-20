@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints "true" if the commits between <from> and <to> change anything that goes into the zip or the app stack ("app"), or into the web page ("web"), "false" if not (docs or tests alone).
-# The deploy workflow compares the deployed commit with the new one and deploys on "true".
+# CI's deploy job compares the deployed commit with the new one and deploys on "true".
 # Usage: infra/scripts/app-changed.sh app|web <from commit> <to commit>
 set -euo pipefail
 
@@ -15,12 +15,12 @@ APP_PATHS=(
   src/ infra/app/ .github/actions/setup-terraform/
   package.json package-lock.json tsconfig.json .node-version
   .terraform-version infra/scripts/build-zip.sh infra/scripts/app-version.sh
-  .github/workflows/deploy.yml .github/workflows/test.yml
+  .github/workflows/ci.yml .github/workflows/test.yml
   infra/scripts/check-on-main.sh infra/scripts/deploy-skip.sh infra/scripts/apply-app.sh infra/scripts/check-live.sh
 )
 WEB_PATHS=(
   web/ vite.config.ts package.json package-lock.json .node-version
-  infra/scripts/release-web.sh .github/workflows/deploy.yml
+  infra/scripts/release-web.sh .github/workflows/ci.yml
   infra/scripts/check-on-main.sh infra/scripts/deploy-skip.sh infra/scripts/check-live.sh
 )
 case "$kind" in

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Decides whether the deploy workflow can skip the function ("app") or the web page ("web"), changing nothing.
+# Decides whether CI's deploy job can skip the function ("app") or the web page ("web"), changing nothing.
 # If so, it sets SKIP_APP or SKIP_WEB (torn-down or unchanged) in $GITHUB_ENV and says why in $GITHUB_STEP_SUMMARY; the steps for that part run only while it is unset.
 # CI never recreates a torn-down stack; release.sh does.
 # A rollback (ROLLBACK_TO set) never skips because nothing changed.

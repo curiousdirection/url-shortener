@@ -11,13 +11,13 @@ variable "region" {
 }
 
 variable "github_repo" {
-  description = "The GitHub repository whose Deploy workflow runs on the CodeBuild runner, as owner/name."
+  description = "The GitHub repository whose CI workflow runs the deploy job on the CodeBuild runner, as owner/name."
   type        = string
   default     = "curiousdirection/url-shortener"
 }
 
 variable "deployer_github_id" {
-  description = "The numeric GitHub account ID of the person whose Deploy runs may start the runner (`gh api users/<login> --jq .id`). No default: set it in terraform.tfvars."
+  description = "The numeric GitHub account ID of the person whose runs may start the runner (`gh api users/<login> --jq .id`). No default: set it in terraform.tfvars."
   type        = string
 
   validation {

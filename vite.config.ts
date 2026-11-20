@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { defineConfig } from "vite";
 
-// The release name, as the deploy workflow reads it back to see what is live (infra/scripts/app-version.sh).
+// The release name, as CI's deploy job reads it back to see what is live (infra/scripts/app-version.sh).
 // Outside a git checkout there is none.
 function release(): string {
   try {
