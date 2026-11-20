@@ -100,14 +100,14 @@ variable "memory_size" {
   default     = 1024
 }
 
-# Lambda keeps 100 of the account's concurrency unreserved, so a cap of N needs an account quota of at least N + 100.
+# Null for practice: Lambda only reserves concurrency that leaves at least 100 of the account's limit unreserved, and this account's limit is 10.
 variable "reserved_concurrency" {
-  description = "How many copies of the function may run at once."
+  description = "How many copies of the function may run at once; null leaves it to the account's Lambda limit."
   type        = number
-  default     = 10
+  default     = null
 
   validation {
-    condition     = var.reserved_concurrency >= 1
-    error_message = "reserved_concurrency must be at least 1; 0 would stop the function."
+    condition     = var.reserved_concurrency == null ? true : var.reserved_concurrency >= 1
+    error_message = "reserved_concurrency must be null or at least 1; 0 would stop the function."
   }
 }

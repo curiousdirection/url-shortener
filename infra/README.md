@@ -27,11 +27,6 @@ All three states are in the S3 bucket.
 - Node.js at the version in `.node-version` (the zip is built on your machine for `release.sh`), `zip` and `openssl`.
 - An AWS CLI profile that can create the resources (admin is simplest), and git.
 - Your account's region (AWS Settings > Project). The default is `eu-north-1`; to change it, put `region = "..."` in a `terraform.tfvars` in each stack folder.
-- A Lambda limit of at least 110, or the deploy fails (why: `reserved_concurrency` in `infra/app/variables.tf`). If this prints less, ask AWS for more in Service Quotas (Lambda, Concurrent executions):
-
-  ```bash
-  aws lambda get-account-settings --region eu-north-1 --query AccountLimit.ConcurrentExecutions
-  ```
 - Everything used is allowed on the AWS Free plan ([list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html)).
 
 ## Set up and first run
