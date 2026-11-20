@@ -35,12 +35,22 @@ const requestOrigin = (c: Context) => {
   return forwarded ? `${url.protocol}//${forwarded}` : url.origin;
 };
 
+// Why a link may not be created, or null. Takes the hostname the client called, so a link back at the shortener is refused.
+const refusal = (url: string, ownHost: string, blockedDomains: string[]) => {
+  const u = new URL(url);
+  const host = u.hostname.replace(/\.$/, "");
+  if (u.username || u.password) return "links with a username or password are not allowed";
+  if (host === ownHost) return "links to this shortener are not allowed";
+  if (blockedDomains.some((d) => host === d || host.endsWith(`.${d}`))) return "this domain is not allowed";
+  return null;
+};
+
 // CloudFront caches a redirect for a year, browsers don't (so a takedown needs only an invalidation), and a 404 for 10 seconds, so a new link works soon.
 const CACHE_REDIRECT = "public, max-age=0, s-maxage=31536000";
 const CACHE_NOT_FOUND = "public, max-age=10";
 const CACHE_NONE = "no-store";
 
-export function buildApp(service: UrlService) {
+export function buildApp(service: UrlService, options: { blockedDomains?: string[] } = {}) {
   const app = new Hono();
 
   app.get("/health", (c) => {
@@ -50,6 +60,8 @@ export function buildApp(service: UrlService) {
 
   app.post("/api/urls", zValidator("json", createSchema), async (c) => {
     const { url, alias } = c.req.valid("json");
+    const refused = refusal(url, new URL(requestOrigin(c)).hostname, options.blockedDomains ?? []);
+    if (refused) return c.json({ error: refused }, 400);
     try {
       const code = await service.create(url, alias);
       return c.json({ code, shortUrl: `${requestOrigin(c)}/${code}`, longUrl: url }, 201);

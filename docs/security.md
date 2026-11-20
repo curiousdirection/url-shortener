@@ -44,6 +44,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 ### The app
 
 - **Input validation.** Requests are validated with zod, and only `http:` and `https:` URLs are accepted (`src/app.ts`). A code in the path that could never exist is a `404` without a table read.
+- **Links that hide their destination are refused.** Creating a link fails with `400` if the URL has a username or password (`https://trusted.com@evil.com`), points at the shortener's own host (a redirect chain), or points at a domain in `blocked_domains` (`infra/app/variables.tf`). This is only checked when a link is created ([ADR 0012](decisions/0012-refuse-hidden-and-blocked-link-targets.md)).
 - **Safe releases.** A manual rollback is one workflow run, and the deploy checks `/health` afterwards. A release is not rolled out gradually.
 
 ## Not covered yet
@@ -56,5 +57,5 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
 | Workflow linting | Broken or unsafe GitHub Actions | actionlint, zizmor |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
-| Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
+| Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links. Only credentials, self-links and a hand-kept blocklist are refused | AWS WAF bot rules, Google Safe Browsing, a maintained URL blocklist |
 | Account monitoring | Suspicious API calls or access | CloudTrail, AWS Config (the Free plan's SCP blocks GuardDuty and Security Hub) |
