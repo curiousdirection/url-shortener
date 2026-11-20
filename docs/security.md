@@ -13,7 +13,6 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 - **Infra changes need a person.** CI never applies `infra/foundation` or `infra/bootstrap`.
 - **Fork pull requests can't claim the runner.** The repository is public, and a fork's PR runs its own workflow files, so it could add a workflow named "CI" that asks for the runner. The primary control is the GitHub setting "Require approval for all external contributors" (Settings > Actions > General), so no such run starts without a person approving it. Before approving one, check that it doesn't change `.github/workflows/`.
 - **Known gap: any branch can claim the runner.** CodeBuild can filter runner jobs only by workflow name, not by branch. So a workflow named "CI" on any branch could get the deploy role, which means anyone with write access can. They could change `main` anyway, so this adds little. `environment: production` is only GitHub's deployment history, not a limit.
-- **A stuck deploy is cancelled.** If no runner picks the deploy job up (a lost webhook, a revoked connection, a filter that doesn't match), the `watchdog` job cancels the run after 15 minutes, so it can't hold up later deploys.
 
 ### The function
 
