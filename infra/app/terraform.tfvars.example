@@ -1,0 +1,7 @@
+# Your settings for this stack: copy to terraform.tfvars (gitignored) and fill in.
+# The other inputs and their defaults are in infra/app/variables.tf.
+
+# The same bucket as in infra/backend.hcl.
+state_bucket = "url-shortener-tfstate-123456789012"
+
+# region = "eu-north-1"

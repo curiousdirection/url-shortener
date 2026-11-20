@@ -55,7 +55,7 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/bootstrap output
    ```
 
-2. **Move the state into the bucket.** Put the `state_bucket` output in `infra/backend.hcl` (`cp infra/backend.hcl.example infra/backend.hcl`) and in `infra/app/terraform.tfvars` (`touch infra/app/terraform.tfvars`) as `state_bucket = "..."`. Both files are gitignored.
+2. **Move the state into the bucket.** Put the `state_bucket` output in `infra/backend.hcl` (`cp infra/backend.hcl.example infra/backend.hcl`) and as `state_bucket` in `infra/app/terraform.tfvars` (`cp infra/app/terraform.tfvars.example infra/app/terraform.tfvars`). Both files are gitignored.
 
    ```bash
    rm infra/bootstrap/backend_override.tf
@@ -72,7 +72,7 @@ Do these once, in order, on a commit that is on `main`.
    gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap output -raw state_bucket)"
    ```
 
-4. **Apply the foundation.** Put the address the alarms go to in `infra/foundation/terraform.tfvars` (gitignored) as `alarm_email = "..."`. Then apply, reading the plan first. It takes a few seconds.
+4. **Apply the foundation.** Put the address the alarms go to as `alarm_email` in `infra/foundation/terraform.tfvars` (`cp infra/foundation/terraform.tfvars.example infra/foundation/terraform.tfvars`, gitignored). Then apply, reading the plan first. It takes a few seconds.
 
    ```bash
    terraform -chdir=infra/foundation apply
