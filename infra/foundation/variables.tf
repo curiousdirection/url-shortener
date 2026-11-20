@@ -32,9 +32,9 @@ variable "table_deletion_protection" {
 
 # Alarms
 
-# Required, with no default: an alarm that emails no one fails silently, so a missing address stops the plan instead.
+# No default: an alarm that emails no one fails silently, so a missing address stops the plan instead.
 variable "alarm_email" {
-  description = "Email address the alarms are sent to. Kept out of git: set it in infra/foundation/terraform.tfvars."
+  description = "Email address the alarms are sent to."
   type        = string
 
   validation {

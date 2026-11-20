@@ -32,6 +32,7 @@ How to run it is in [infra/README.md](../../infra/README.md).
 - **Taking down a link needs a cache invalidation.** Browsers don't keep redirects, so that's enough.
 - **Rate limiting is per IP,** so a flood spread across many IPs still gets through. CloudFront's built-in DDoS protection and the cache handle that.
 - **Practice doesn't exercise the rate limits.** Turn them on for a session to try them ("Deploy" in [infra/README.md](../../infra/README.md)).
+- **Practice is open to spam links since the web page ([0009](0009-frontend-on-s3.md)).** The address is in every deploy summary of this public repository, and the page makes the body hash itself, so anyone with a browser can create links. With rate limiting off for practice, nothing limits how many.
 
 ## Alternatives considered
 
@@ -42,3 +43,4 @@ How to run it is in [infra/README.md](../../infra/README.md).
 ## Revisit when
 
 Cloudflare's full-scale price is known, the real cache hit rate is known, or the traffic doesn't fit per-request pricing.
+Turn rate limiting on for practice too if the practice deployment is abused: spam links created through the page, or a flood of requests.

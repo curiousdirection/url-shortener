@@ -53,7 +53,7 @@ For the web page, run `npm run web:dev` as well and open http://localhost:5173. 
 
 ## Deploy
 
-[`infra/`](infra/README.md) runs the app on AWS as a Lambda function with a function URL behind CloudFront, and the links in DynamoDB. A push to `main` that changes the app is tested, zipped and deployed by GitHub Actions (`.github/workflows/ci.yml`, then `deploy.yml`). The one-time setup, the manual first run and rollback are in [`infra/README.md`](infra/README.md).
+[`infra/`](infra/README.md) runs the app on AWS as a Lambda function with a function URL behind CloudFront, and the links in DynamoDB. A push to `main` that changes the app is tested, zipped and deployed by GitHub Actions (`.github/workflows/ci.yml`). The one-time setup, the manual first run and rollback are in [`infra/README.md`](infra/README.md).
 
 What protects the app and its deployment, and what isn't covered yet: [`docs/security.md`](docs/security.md).
 

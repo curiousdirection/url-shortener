@@ -23,7 +23,6 @@ output "function_url" {
 }
 
 # The release that is deployed now.
-# The deploy workflow compares it with the new commit to decide whether anything changed.
 output "app_version" {
   value = var.app_version
 }

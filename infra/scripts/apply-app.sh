@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Plans infra/app for the checked-out commit, shows the plan in $GITHUB_STEP_SUMMARY and applies exactly that plan.
 # -lock-timeout waits for a local release.sh.
-# Used by the deploy workflow; release.sh applies interactively instead.
 # Usage: infra/scripts/apply-app.sh <package hash from build-zip.sh>
 set -euo pipefail
 

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # Uploads the built web page (build/web) to its bucket and clears CloudFront's copy of index.html.
-# Run `npm run web:build` first; it isn't run here, so the deploy workflow can build before it signs in.
-# Used by release.sh and the deploy workflow.
 # Needs AWS credentials and `terraform init` done in infra/app (release.sh and the workflow do both).
 # Usage: infra/scripts/release-web.sh
 set -euo pipefail
