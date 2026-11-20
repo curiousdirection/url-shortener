@@ -27,7 +27,7 @@ All three states are in the S3 bucket.
 - Node.js at the version in `.node-version` (the zip is built on your machine for `release.sh`), `zip` and `openssl`.
 - An AWS CLI profile that can create the resources (admin is simplest), and git.
 - Your account's region (AWS Settings > Project). The default is `eu-north-1`; to change it, put `region = "..."` in a `terraform.tfvars` in each stack folder.
-- An account that may run at least 110 Lambda copies at once, or the deploy fails. The function reserves 10 of them (`reserved_concurrency` in `infra/app/variables.tf`), and Lambda always keeps 100 free for other functions. New accounts can get fewer than the usual 1,000. If this prints less than 110, ask for more in Service Quotas (Lambda, Concurrent executions):
+- A Lambda limit of at least 110, or the deploy fails (why: `reserved_concurrency` in `infra/app/variables.tf`). If this prints less, ask AWS for more in Service Quotas (Lambda, Concurrent executions):
 
   ```bash
   aws lambda get-account-settings --region eu-north-1 --query AccountLimit.ConcurrentExecutions
