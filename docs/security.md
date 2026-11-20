@@ -43,6 +43,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 ### The app
 
+- **Static analysis.** CodeQL scans the app code and the workflows for injection and unsafe patterns on every push to `main`, every pull request and weekly (`.github/workflows/codeql.yml`). Findings appear under Security > Code scanning, and block a merge only if a branch rule requires the check.
 - **Input validation.** Requests are validated with zod, and only `http:` and `https:` URLs are accepted (`src/app.ts`). A code in the path that could never exist is a `404` without a table read.
 - **Safe releases.** A manual rollback is one workflow run, and the deploy checks `/health` afterwards. A release is not rolled out gradually.
 
@@ -52,7 +53,6 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 |---|---|---|
 | Dependency scanning | Known CVEs in npm packages | Dependabot alerts, `npm audit` |
 | IaC scanning | Insecure Terraform (open permissions, missing encryption) | Trivy, Checkov |
-| Static analysis | Injection and unsafe code patterns | CodeQL |
 | Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
 | Workflow linting | Broken or unsafe GitHub Actions | actionlint, zizmor |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
