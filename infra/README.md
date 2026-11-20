@@ -142,46 +142,12 @@ terraform -chdir=infra/foundation apply
 
 It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI`. Check the runner project's webhook in the CodeBuild console and that the connection is still approved.
 
-## Move an existing setup off access keys
-
-For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out. From step 2 until the merge, deploys can't sign in, so go straight through.
-
-1. **Create the connection**, as in step 1 of "Set up and first run": run `terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github`, then approve it in the console. Also set "Require approval for all external contributors" (step 3 there).
-2. **Delete the two users' access keys.** Terraform can't delete a user that has one, so this must come before the apply that removes the users (names are for the default `name`).
-
-   ```bash
-   for user in github-deploy-url-shortener github-plan-url-shortener; do
-     for key in $(aws iam list-access-keys --user-name "$user" --query 'AccessKeyMetadata[].AccessKeyId' --output text); do
-       aws iam delete-access-key --user-name "$user" --access-key-id "$key"
-     done
-   done
-   ```
-
-3. **Apply the bootstrap.** It makes the runner, changes the deploy role's trust to it, and removes the plan role and both users.
-
-   ```bash
-   terraform -chdir=infra/bootstrap apply
-   ```
-
-4. **Merge** the change to `main`. The old Deploy workflow can't sign in any more, so the merge is what brings deploys back.
-5. **Check that the merge's CI run deploys:** its `deploy` job gets a runner and passes. If it doesn't start, see [If the deploy job never starts](#if-the-deploy-job-never-starts).
-6. **Delete the old GitHub settings.**
-
-   ```bash
-   gh secret delete AWS_DEPLOY_ACCESS_KEY_ID --env production
-   gh secret delete AWS_DEPLOY_SECRET_ACCESS_KEY --env production
-   gh secret delete AWS_PLAN_ACCESS_KEY_ID
-   gh secret delete AWS_PLAN_SECRET_ACCESS_KEY
-   gh variable delete AWS_DEPLOY_ROLE_ARN --env production
-   gh variable delete AWS_PLAN_ROLE_ARN
-   ```
-
 ## Rollback
 
 A deploy switches all traffic to the new code at once. If the new code is broken, the CI run fails its `/health` check, but the broken code keeps running until you roll back. Either:
 
 - **Revert the bad commit on `main`.** CI tests and deploys the revert like any other change.
-- **Redeploy an earlier commit.** Run CI by hand (Actions > CI > Run workflow, on `main`) and set `ref` to that commit. It must be on `main` and from after the move to a CodeBuild runner ([ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md)), because older commits' scripts expect the access keys; the workflow refuses commits from other branches. A rollback skips the tests, so a broken `main` can't block it.
+- **Redeploy an earlier commit.** Run CI by hand (Actions > CI > Run workflow, on `main`) and set `ref` to that commit. It must be on `main`, and no older than the commit that added the CodeBuild runner ([ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md)), whose scripts are the first that can deploy this way; the workflow refuses commits from other branches. A rollback skips the tests, so a broken `main` can't block it.
 
 A rollback changes the code, not the links in the table. So a change to how links are stored must still work with the previous code.
 
