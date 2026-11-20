@@ -32,6 +32,8 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
+      # Fails on a high or critical advisory in any package, dev tools included, because they build what we ship.
+      - run: npm audit --audit-level=high
       # The image has no health check we can use, so retry until the service answers.
       - name: Create the test table
         run: |

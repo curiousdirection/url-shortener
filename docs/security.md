@@ -25,6 +25,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 ### Supply chain
 
 - **Actions pinned to commit SHAs**, so a moved tag can't change what runs.
+- **Known-vulnerability check.** CI runs `npm audit --audit-level=high` on every push, and a high or critical advisory in any package, dev tools included, fails the tests and so blocks a deploy (a rollback skips the checks). Advisories below high are not checked.
 - **Locked dependencies.** `npm ci` installs exactly what `package-lock.json` says.
 - **One file deployed.** The zip holds only the bundled app, not `node_modules` or the source.
 - **Same zip for the same code.** The zip is built the same way every time, so the same code gives the same hash.
@@ -50,7 +51,6 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 | Gap | What it would catch | Typical tool |
 |---|---|---|
-| Dependency scanning | Known CVEs in npm packages | Dependabot alerts, `npm audit` |
 | IaC scanning | Insecure Terraform (open permissions, missing encryption) | Trivy, Checkov |
 | Static analysis | Injection and unsafe code patterns | CodeQL |
 | Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
