@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Bundles the app into build/app.zip, the package Lambda runs, and prints the zip's hash (the value infra/app takes as package_hash) as the only thing on stdout.
 # Run `npm ci` first.
-# Used by release.sh, the deploy workflow and the test workflow.
 # Usage: infra/scripts/build-zip.sh
 set -euo pipefail
 
