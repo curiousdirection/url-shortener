@@ -41,7 +41,14 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github
    ```
 
-   Then approve the connection: in the console, open Developer Tools > Settings > Connections (in the stack's region), choose the pending `url-shortener-github` and "Update pending connection". This installs the AWS Connector for GitHub app; give it access to this repository. Then apply the rest:
+   Then approve the connection, in a browser that is signed in to both AWS and GitHub (as the repository's owner):
+
+   1. Open https://console.aws.amazon.com/codesuite/settings/connections and switch to the stack's region (top right).
+   2. Choose `url-shortener-github` (status "Pending"), then "Update pending connection".
+   3. Under "GitHub Apps", choose "Install a new app". GitHub opens: choose your account, choose "Only select repositories", pick this repository and choose "Install".
+   4. Back in AWS the app's installation ID is filled in; choose "Connect". The status changes to "Available".
+
+   Then apply the rest:
 
    ```bash
    terraform -chdir=infra/bootstrap apply
