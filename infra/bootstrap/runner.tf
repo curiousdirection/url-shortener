@@ -11,6 +11,8 @@ resource "aws_codeconnections_connection" "github" {
 }
 
 resource "aws_cloudwatch_log_group" "runner" {
+  #checkov:skip=CKV_AWS_158: The build log holds no secrets, and the AWS-owned key costs nothing.
+  #checkov:skip=CKV_AWS_338: 14 days is enough to debug a deploy.
   name              = "/aws/codebuild/${local.runner_name}"
   retention_in_days = 14
 }

@@ -11,6 +11,10 @@ locals {
 }
 
 resource "aws_s3_bucket" "state" {
+  #checkov:skip=CKV2_AWS_62: Nothing reacts to state writes.
+  #checkov:skip=CKV_AWS_18: Access is limited by IAM, and a log bucket would need a log bucket of its own.
+  #checkov:skip=CKV_AWS_144: Versioning covers bad writes, and a second region adds a bucket and a role to manage.
+  #checkov:skip=CKV_AWS_145: SSE-S3 is enough here, and a KMS key would need key access for the deploy role and the runner.
   bucket = local.state_bucket
   # Without this, AWS refuses to delete a bucket that still holds state or old versions.
   # `terraform destroy` here fails on purpose until you have emptied it.

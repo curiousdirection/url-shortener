@@ -16,6 +16,7 @@ locals {
 
 # Not encrypted with KMS: CloudWatch can't publish to a topic that uses the AWS managed SNS key, and alarm messages hold no secrets.
 resource "aws_sns_topic" "alarms" {
+  #checkov:skip=CKV_AWS_26: See the comment above: CloudWatch can't publish to a topic that uses the AWS managed key.
   name = "${var.name}-alarms"
 }
 

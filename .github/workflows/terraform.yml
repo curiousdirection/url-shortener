@@ -1,4 +1,4 @@
-# Checks the Terraform formatting and configuration.
+# Checks the Terraform formatting and configuration, and scans it for insecure settings.
 # Not run on its own: ci.yml calls it on every push.
 name: Terraform
 
@@ -22,3 +22,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-terraform
       - run: infra/scripts/check-terraform.sh
+
+  # Runs a third-party package, so it has no AWS credentials and only reads the code.
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: infra/scripts/scan-terraform.sh

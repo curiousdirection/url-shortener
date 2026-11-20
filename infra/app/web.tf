@@ -3,6 +3,12 @@
 # Uploading the files: infra/scripts/release-web.sh.
 
 resource "aws_s3_bucket" "web" {
+  #checkov:skip=CKV2_AWS_62: Nothing reacts to uploads.
+  #checkov:skip=CKV_AWS_18: The files are public and only CloudFront reads them.
+  #checkov:skip=CKV2_AWS_61: Every release replaces the files, so there are no old versions to expire.
+  #checkov:skip=CKV_AWS_144: The files can be rebuilt from the code, so no second copy.
+  #checkov:skip=CKV_AWS_21: The files can be rebuilt from the code, so no old versions to keep.
+  #checkov:skip=CKV_AWS_145: The files are public, so SSE-S3 is enough and a KMS key would only add cost.
   bucket = "${var.name}-web-${data.aws_caller_identity.current.account_id}"
   # The files can be rebuilt, so destroying the stack may delete them.
   force_destroy = true
