@@ -1,0 +1,4 @@
+rules:
+  # actionlint rejects the `$/` form it suggests.
+  self-repository:
+    disable: true

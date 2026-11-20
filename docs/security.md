@@ -25,6 +25,7 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 ### Supply chain
 
 - **Actions pinned to commit SHAs**, so a moved tag can't change what runs.
+- **Workflows are linted.** CI runs actionlint (broken workflows) and zizmor (unsafe ones, such as injectable expressions, broad permissions and unpinned actions) on every push, and a finding fails the build (`.github/workflows/lint.yml`). Checkouts don't leave the `GITHUB_TOKEN` in `.git`, so a later step or artifact can't leak it.
 - **Locked dependencies.** `npm ci` installs exactly what `package-lock.json` says.
 - **One file deployed.** The zip holds only the bundled app, not `node_modules` or the source.
 - **Same zip for the same code.** The zip is built the same way every time, so the same code gives the same hash.
@@ -54,7 +55,6 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | IaC scanning | Insecure Terraform (open permissions, missing encryption) | Trivy, Checkov |
 | Static analysis | Injection and unsafe code patterns | CodeQL |
 | Secret scanning | Keys committed by mistake | GitHub secret scanning with push protection |
-| Workflow linting | Broken or unsafe GitHub Actions | actionlint, zizmor |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
 | Account monitoring | Suspicious API calls or access | CloudTrail, AWS Config (the Free plan's SCP blocks GuardDuty and Security Hub) |
