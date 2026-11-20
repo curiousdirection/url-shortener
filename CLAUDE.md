@@ -12,6 +12,8 @@ This AWS account is a Free-plan project account, so AWS's [fixed SCPs](https://d
 
 ## Writing docs, comments and CI
 
+- **Comment only what the code can't say:** a trap, or a constraint a reader couldn't work out from the code. One line, no restating docs, no links to other files. A new file may start with one line saying what it's for.
 - **One home per fact.** Why we decided something goes in the ADR; how to operate it (steps, commands) in `infra/README.md`; what protects what in `docs/security.md`; how a piece of code works, or a trap in it, in one comment next to that code. Everywhere else links to it or says nothing.
+- **Docs describe how things are now.** History belongs in ADRs, and one-off steps such as a migration belong in the PR description, not in `infra/README.md`, `docs/security.md` or comments.
 - **Before committing, read the diff for repeats.** If a fact appears more than once, keep it in its home and cut the rest.
 - **Write one sentence per comment line and let the viewer wrap it** (the owner reads in a narrow viewer, and hard-wrapped lines break twice there). Don't wrap inside a sentence. A line that is only a URL and an indented command sample get their own lines. Write paths from the repo root.

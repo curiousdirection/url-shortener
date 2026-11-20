@@ -3,7 +3,6 @@
 # Everything it depends on is in infra/foundation: the table and the function's role.
 # See docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md and docs/decisions/0006-move-to-lambda-and-dynamodb.md.
 #
-# This is the only stack that CI applies (.github/workflows/deploy.yml).
 # It uses the `github-deploy-url-shortener` role from infra/bootstrap.
 
 terraform {

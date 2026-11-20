@@ -9,13 +9,13 @@ Internet -> CloudFront (*.cloudfront.net; AWS WAF rate limits at full scale) -> 
 
 CloudFront is the only way in: the function URL and the bucket refuse unsigned calls.
 
-A push to `main` that changes the app is deployed by GitHub Actions. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md).
+A push to `main` that changes the app is deployed by CI (GitHub Actions); its deploy job runs on a runner that CodeBuild hosts in this account. Why it is built this way: [ADR 0003](../docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md) and [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md).
 
 ## The three stacks
 
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
-| `bootstrap/` | The S3 state bucket, the two CI roles and the IAM user that signs in as each | You, once (and again when its permissions change) |
+| `bootstrap/` | The S3 state bucket, the CodeBuild runner that the deploy job runs on, the deploy role it signs in as, and the connection to GitHub | You, once (and again when its permissions change) |
 | `foundation/` | The DynamoDB table and the function's IAM role | You, from your machine |
 | `app/` | The Lambda function, its function URL, its log group, the web page's S3 bucket, the CloudFront distribution, its access logs (not at full scale) and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
@@ -33,11 +33,24 @@ All three states are in the S3 bucket.
 
 Do these once, in order, on a commit that is on `main`.
 
-1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file.
+1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. Create the GitHub connection first and approve it, because the runner's webhook can't be made through a pending connection.
 
    ```bash
    printf 'terraform {\n  backend "local" {}\n}\n' > infra/bootstrap/backend_override.tf
    terraform -chdir=infra/bootstrap init
+   terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github
+   ```
+
+   Then approve the connection, in a browser that is signed in to both AWS and GitHub (as the repository's owner):
+
+   1. Open https://console.aws.amazon.com/codesuite/settings/connections and switch to the stack's region (top right).
+   2. Choose `url-shortener-github` (status "Pending"), then "Update pending connection".
+   3. Under "GitHub Apps", choose "Install a new app". GitHub opens: choose your account, choose "Only select repositories", pick this repository and choose "Install".
+   4. Back in AWS the app's installation ID is filled in; choose "Connect". The status changes to "Available".
+
+   Then apply the rest:
+
+   ```bash
    terraform -chdir=infra/bootstrap apply
    terraform -chdir=infra/bootstrap output
    ```
@@ -52,37 +65,20 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/app init -backend-config=../backend.hcl
    ```
 
-3. **Set up GitHub.** Under Settings > Environments, create `production` and limit its deployment branches to `main`. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
-
-```bash
-gh variable set AWS_REGION --body eu-north-1
-gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap output -raw state_bucket)"
-gh variable set AWS_PLAN_ROLE_ARN --body "$(terraform -chdir=infra/bootstrap output -raw plan_role_arn)"
-gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=infra/bootstrap output -raw deploy_role_arn)"
-```
-
-4. **Create the CI access keys.** The bootstrap made one IAM user per role but no keys, so they stay out of the state. Make each key and store it as a GitHub secret (`gh` and `jq` are used here; the secrets can also be added in Settings). The deploy keys go to the `production` environment from step 3, so only `main` can use them; the plan keys go to the repository.
+3. **Set up GitHub.** Under Settings > Actions > General, set "Fork pull request workflows from outside collaborators" to "Require approval for all external contributors" (the default only asks first-time contributors). Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
 
    ```bash
-   user=$(terraform -chdir=infra/bootstrap output -raw deploy_user_name)
-   key=$(aws iam create-access-key --user-name "$user" --query AccessKey --output json)
-   jq -j .AccessKeyId <<<"$key" | gh secret set AWS_DEPLOY_ACCESS_KEY_ID --env production
-   jq -j .SecretAccessKey <<<"$key" | gh secret set AWS_DEPLOY_SECRET_ACCESS_KEY --env production
-
-   user=$(terraform -chdir=infra/bootstrap output -raw plan_user_name)
-   key=$(aws iam create-access-key --user-name "$user" --query AccessKey --output json)
-   jq -j .AccessKeyId <<<"$key" | gh secret set AWS_PLAN_ACCESS_KEY_ID
-   jq -j .SecretAccessKey <<<"$key" | gh secret set AWS_PLAN_SECRET_ACCESS_KEY
-   unset key
+   gh variable set AWS_REGION --body eu-north-1
+   gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap output -raw state_bucket)"
    ```
 
-5. **Apply the foundation.** Read the plan first. It takes a few seconds.
+4. **Apply the foundation.** Read the plan first. It takes a few seconds.
 
    ```bash
    terraform -chdir=infra/foundation apply
    ```
 
-6. **Create the function, the bucket and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
+5. **Create the function, the bucket and the CDN from your machine**, because CI only updates what already exists. CloudFront takes about 5 to 15 minutes to deploy, and Terraform waits for it, so the apply seems stuck on the distribution; that is normal. The same wait applies to any later change to the distribution.
 
    ```bash
    infra/scripts/release.sh # yes
@@ -92,28 +88,28 @@ gh variable set AWS_DEPLOY_ROLE_ARN --env production --body "$(terraform -chdir=
 
    `release.sh` also uploads the web page.
 
-7. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that CI can sign in.
+6. **Run CI once by hand** (Actions > CI > Run workflow, on `main`, `ref` empty). It runs the checks and then deploys, so it shows that the runner starts and can sign in. If it doesn't start, see [If the deploy job never starts](#if-the-deploy-job-never-starts).
 
-If a role is refused a `lambda:`, `logs:` or `s3:` action, add it in `bootstrap/deploy-role.tf` (or `plan-role.tf`) and apply the bootstrap again: the permission lists haven't been run against a real account yet.
+If the role is refused a `lambda:`, `logs:` or `s3:` action, add it in `infra/bootstrap/deploy-role.tf` and apply the bootstrap again: the permission list hasn't been run against a real account yet.
 
 ## Change the bootstrap
 
-CI never applies the bootstrap, so you do, after any change to its `.tf` files. 
+CI never applies the bootstrap, so you do, after any change to its `.tf` files.
 
 ```bash
 terraform -chdir=infra/bootstrap plan
 terraform -chdir=infra/bootstrap apply
 ```
 
-The access keys and GitHub settings stay as they are.
+The GitHub settings stay as they are.
 
 ## Deploy
 
-**App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
+**App changes:** merge to `main`. Once its checks pass, CI ships it: a `build` job on GitHub's runners makes the zip and the page, then a `deploy` job on the CodeBuild runner applies and uploads them. Its logs are also in the `/aws/codebuild/url-shortener-deploy` log group. If the `deploy` job never starts, see [If the deploy job never starts](#if-the-deploy-job-never-starts). Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
 
-**Web page changes** (`web/`): merge to `main`. After the app deploy, the Deploy workflow's `web` job builds the page, uploads it with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
+**Web page changes** (`web/`): merge to `main`. After the app deploy, CI uploads the page it built with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
 
-A change to CloudFront takes a few minutes to reach every location; the Deploy workflow's `/health` check runs after that.
+A change to CloudFront takes a few minutes to reach every location; CI's `/health` check runs after that.
 
 **Rate limits** are off for practice. To try them, set `rate_limiting = true` in `infra/app/terraform.tfvars`, run `release.sh`, then set it back. The limits are variables in `infra/app/variables.tf`.
 
@@ -142,16 +138,16 @@ terraform -chdir=infra/foundation plan
 terraform -chdir=infra/foundation apply
 ```
 
-## Rotate the CI access keys
+### If the deploy job never starts
 
-Repeat step 4 (a user can hold two keys, so the old one works until you delete it), then delete the old key: `aws iam delete-access-key --user-name <user> --access-key-id <old key id>`, with the id from `aws iam list-access-keys --user-name <user>`.
+It waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `CI`. Check the runner project's webhook in the CodeBuild console and that the connection is still approved.
 
 ## Rollback
 
-A deploy switches all traffic to the new code at once. If the new code is broken, the Deploy run fails its `/health` check, but the broken code keeps running until you roll back. Either:
+A deploy switches all traffic to the new code at once. If the new code is broken, the CI run fails its `/health` check, but the broken code keeps running until you roll back. Either:
 
 - **Revert the bad commit on `main`.** CI tests and deploys the revert like any other change.
-- **Redeploy an earlier commit.** Run the Deploy workflow by hand and set `ref` to that commit. It must be on `main` and from after the move to Lambda; the workflow refuses commits from other branches.
+- **Redeploy an earlier commit.** Run CI by hand (Actions > CI > Run workflow, on `main`) and set `ref` to that commit. It must be on `main`, and no older than the commit that added the CodeBuild runner ([ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md)), whose scripts are the first that can deploy this way; the workflow refuses commits from other branches. A rollback skips the tests, so a broken `main` can't block it.
 
 A rollback changes the code, not the links in the table. So a change to how links are stored must still work with the previous code.
 
@@ -168,7 +164,7 @@ Destroying the app takes several minutes, because CloudFront disables and then d
 
 If the table has deletion protection on, set `table_deletion_protection = false` in `infra/foundation/terraform.tfvars` and apply first. Destroying the table deletes the links, and its point-in-time backups with them.
 
-The bootstrap stays; it costs almost nothing. To remove it too, delete the two users' access keys (Terraform can't delete a user that has one), move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
+The bootstrap stays; it costs almost nothing. To remove it too, move its state back to your machine first (it can't be in the bucket it deletes): recreate `backend_override.tf` as in step 1, run `terraform -chdir=infra/bootstrap init -migrate-state`, empty the bucket (versions included), then run `terraform destroy` in `infra/bootstrap`.
 
 Then check nothing is left; it should print nothing:
 
@@ -182,7 +178,7 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
-- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. The web bucket and the invalidations on each release (the first 1,000 paths a month are free) cost about $0. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
+- **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. The web bucket and the invalidations on each release (the first 1,000 paths a month are free) cost about $0. CodeBuild's free tier covers 100 build minutes a month on the small instance, and a deploy takes a few minutes, longer when CloudFront changes. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
 - **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
