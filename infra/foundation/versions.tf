@@ -1,4 +1,4 @@
-# The foundation stack: the DynamoDB table and the Lambda function's role.
+# The foundation stack: the DynamoDB table, the Lambda function's role and the alarms.
 # See docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md and docs/decisions/0006-move-to-lambda-and-dynamodb.md.
 
 terraform {
