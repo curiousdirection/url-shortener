@@ -6,12 +6,13 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 
 ### Access to AWS
 
-- **Stored keys, narrowly used.** GitHub Actions signs in with an IAM user's access key (a GitHub secret) and assumes a role, so jobs get credentials that expire within an hour. Each user can only assume its own role, and each role trusts only its user ([ADR 0004](decisions/0004-access-keys-instead-of-oidc.md)).
-- **Deploy keys only on `main`.** They are secrets of the `production` environment, which only `main` can use. The plan keys are repository secrets, so CI on any branch can use them.
-- **Least privilege for CI.** The deploy role can update, not create or delete, the function, its URL and log group, the web bucket, the CloudFront distribution, its access logs and the web ACL, and pass the function's role to Lambda. It can upload files to the web bucket but not delete them, and clear the distribution's cache. The plan role is read-only. Neither can change IAM or the bootstrap stack (`infra/bootstrap/deploy-role.tf`, `plan-role.tf`).
-- **No secrets for branches.** The plan role is explicitly denied SSM parameter reads, Secrets Manager values and KMS decryption, except through Lambda so it can read the function's environment variables. Code pushed to a branch couldn't read a secret if one is added later, as long as secrets live in SSM or Secrets Manager and never in Lambda environment variables. The app has no secrets today.
-- **Workflow permissions.** Workflows get a read-only `GITHUB_TOKEN`. The test job, which runs npm packages, is given no secrets. The deploy job builds the zip and the web page, and so runs npm packages, before it signs in to AWS.
-- **Infra changes need a person.** CI never plans or applies `infra/foundation` or `infra/bootstrap`.
+- **No stored keys.** The deploy job runs on a CodeBuild-hosted runner in this account and gets short-lived credentials from the CodeBuild project's service role. There are no IAM users or access keys, and no AWS secrets in GitHub ([ADR 0011](decisions/0011-deploy-on-a-codebuild-runner.md)).
+- **One way to the deploy role.** Its trust policy allows only CodeBuild, and only for the runner project in this account (`aws:SourceAccount` and `aws:SourceArn`). The runner's own permissions are writing its build logs and using the GitHub connection (`infra/bootstrap/deploy-role.tf`, `infra/bootstrap/runner.tf`).
+- **Least privilege for CI.** The deploy role can update, not create or delete, the function, its URL and log group, the web bucket, the CloudFront distribution, its access logs and the web ACL, and pass the function's role to Lambda. It can upload files to the web bucket but not delete them, and clear the distribution's cache. It can't change IAM or the bootstrap stack, which is explicitly denied.
+- **Workflow permissions.** Workflows get a read-only `GITHUB_TOKEN`. The test job and CI's build job, which run npm packages, run on GitHub-hosted runners with no AWS credentials. The deploy job, which has them, runs no npm packages: it gets the built zip and page as artifacts.
+- **Infra changes need a person.** CI never applies `infra/foundation` or `infra/bootstrap`.
+- **Fork pull requests can't claim the runner.** The repository is public, and a fork's PR runs its own workflow files, so it could add a workflow named "CI" that asks for the runner. The primary control is the GitHub setting "Require approval for all external contributors" (Settings > Actions > General), so no such run starts without a person approving it. Before approving one, check that it doesn't change `.github/workflows/`.
+- **Known gap: any branch can claim the runner.** CodeBuild can filter runner jobs only by workflow name, not by branch. So a workflow named "CI" on any branch could get the deploy role, which means anyone with write access can. They could change `main` anyway, so this adds little. `environment: production` is only GitHub's deployment history, not a limit.
 
 ### The function
 
@@ -56,5 +57,4 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Branch protection | Unreviewed or unchecked code reaching `main` | GitHub settings: require a pull request and passing checks |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
-| Key rotation | Stale or leaked CI access keys, which don't expire | A reminder to rotate by hand (`infra/README.md`), or OIDC, which this account's Free plan blocks ([ADR 0004](decisions/0004-access-keys-instead-of-oidc.md)) |
 | Account monitoring | Suspicious API calls or access | CloudTrail, GuardDuty |

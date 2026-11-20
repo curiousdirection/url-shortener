@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Fails unless the checked-out commit is in main's history, so a rollback can only deploy code that was merged.
-# Used by the deploy workflow when it is run by hand with a ref.
 # Usage: infra/scripts/check-on-main.sh
 set -euo pipefail
 
