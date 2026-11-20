@@ -1,5 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 400" width="1060" height="400" role="img" aria-labelledby="title">
-  <!-- Same diagram as docs/architecture.html, for the README; change both together. -->
   <title id="title">URL Shortener architecture: Client to CloudFront, which serves the web page from S3 and calls the Lambda function, which reads and writes the urls table in DynamoDB.</title>
   <style>
     text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 12px; fill: #59636e; text-anchor: middle; }

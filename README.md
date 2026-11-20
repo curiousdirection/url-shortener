@@ -6,8 +6,6 @@ Node + TypeScript + Hono, on AWS Lambda and DynamoDB. A short code is 7 random b
 
 ![Architecture: Client to CloudFront, which serves the web page from S3 and calls the Lambda function, which reads and writes the urls table in DynamoDB](docs/architecture.svg)
 
-Open [`docs/architecture.html`](docs/architecture.html) in a browser for the same diagram as a page that also fits a phone screen.
-
 - **Deployed:** CloudFront's `*.cloudfront.net` address is the public address, and it serves the web page from S3 ([ADR 0009](docs/decisions/0009-frontend-on-s3.md)). It answers repeated redirects from its cache and passes the rest to the function, which only it can call ([ADR 0007](docs/decisions/0007-cdn-cloudfront.md)). There is no server to keep running, and nothing is paid for while idle. Locally it's one Node process (`src/server.ts`) and DynamoDB Local.
 - **Create:** a custom alias is written as the code. Otherwise `codeGenerator` makes a random code and writes it. The write only succeeds if the code is free: a taken alias returns `409`; a taken generated code is replaced by a new one, up to 5 times.
 - **Resolve:** the table is read by its key `code`, and the app answers with a `302` redirect, or `404`. A code that isn't found is read once more, strongly consistent, so a new link never answers `404`.
