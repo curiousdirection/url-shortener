@@ -46,6 +46,13 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 - **Input validation.** Requests are validated with zod, and only `http:` and `https:` URLs are accepted (`src/app.ts`). A code in the path that could never exist is a `404` without a table read.
 - **Safe releases.** A manual rollback is one workflow run, and the deploy checks `/health` afterwards. A release is not rolled out gradually.
 
+### Account monitoring
+
+- **A record of API calls.** One CloudTrail trail logs the account's management events in every Region, with log file validation, into a private bucket that is encrypted, blocks public access and refuses non-TLS requests. Logs are deleted after 90 days (`infra/foundation/cloudtrail.tf`, [ADR 0013](decisions/0013-cloudtrail-trail-and-alarm.md)).
+- **An email on the worst events.** An alarm on the existing alarm topic fires when the root user is used or the trail is stopped or deleted.
+- **CI can't touch the trail.** The deploy role has no CloudTrail or trail-bucket permissions, and they are explicitly denied (`infra/bootstrap/github.tf`).
+- **Known gap: nothing reads the logs.** Only those events raise an alarm; anything else is found by looking (`infra/README.md`). GuardDuty and Security Hub are blocked by the Free plan's SCP, and AWS Config isn't set up.
+
 ## Not covered yet
 
 | Gap | What it would catch | Typical tool |
@@ -57,4 +64,3 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Workflow linting | Broken or unsafe GitHub Actions | actionlint, zizmor |
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
-| Account monitoring | Suspicious API calls or access | CloudTrail, AWS Config (the Free plan's SCP blocks GuardDuty and Security Hub) |

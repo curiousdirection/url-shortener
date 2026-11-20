@@ -106,5 +106,19 @@ locals {
       Action   = "s3:*"
       Resource = "${local.state_arn}/bootstrap/*"
     },
+    # The trail and its bucket are made in infra/foundation.
+    {
+      Effect = "Deny"
+      Action = [
+        "cloudtrail:Add*", "cloudtrail:Create*", "cloudtrail:Delete*", "cloudtrail:Put*",
+        "cloudtrail:Remove*", "cloudtrail:Start*", "cloudtrail:Stop*", "cloudtrail:Update*",
+      ]
+      Resource = "*"
+    },
+    {
+      Effect   = "Deny"
+      Action   = "s3:*"
+      Resource = ["arn:aws:s3:::${var.name}-cloudtrail-${local.account_id}", "arn:aws:s3:::${var.name}-cloudtrail-${local.account_id}/*"]
+    },
   ]
 }

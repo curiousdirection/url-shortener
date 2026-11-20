@@ -16,7 +16,7 @@ A push to `main` that changes the app is deployed by CI (GitHub Actions); its de
 | Folder | What is in it | Who applies it |
 | --- | --- | --- |
 | `bootstrap/` | The S3 state bucket, the CodeBuild runner that the deploy job runs on, the deploy role it signs in as, and the connection to GitHub | You, once (and again when its permissions change) |
-| `foundation/` | The DynamoDB table, the function's IAM role and the CloudWatch alarms | You, from your machine |
+| `foundation/` | The DynamoDB table, the function's IAM role, the CloudWatch alarms and the CloudTrail trail | You, from your machine |
 | `app/` | The Lambda function, its function URL, its log group, the web page's S3 bucket, the CloudFront distribution, its access logs (not at full scale) and (at full scale) the AWS WAF web ACL | GitHub Actions on push to `main`, or you with `scripts/release.sh` |
 
 All three states are in the S3 bucket.
@@ -78,6 +78,12 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/foundation apply
    ```
 
+   This also creates the CloudTrail trail and its bucket, and an alarm on root use or a stopped trail ([ADR 0013](../docs/decisions/0013-cloudtrail-trail-and-alarm.md)). Check that it is logging, and that the first digest and log files arrive (within about 15 minutes):
+
+   ```bash
+   aws cloudtrail get-trail-status --name url-shortener-trail --region eu-north-1 --query '{logging: IsLogging, delivered: LatestDeliveryTime, error: LatestDeliveryError}'
+   ```
+
    AWS then emails that address a link (subject "AWS Notification - Subscription Confirmation"): click it within 48 hours, or no alarm is delivered. If it expired, `terraform -chdir=infra/foundation apply -replace=aws_sns_topic_subscription.alarm_email` sends a new one. To see an alarm email arrive, force one into alarm; it goes back to OK, with a second email, within a few minutes:
 
    ```bash
@@ -130,6 +136,12 @@ aws logs tail url-shortener-cdn-access --region us-east-1 --since 1h --format sh
 Without the `cut` and `jq`, it prints every line with all its fields; add `--follow` to keep watching.
 
 `time-taken` is the whole request as CloudFront saw it; `origin-fbl` is the part spent waiting for the function URL. To find one request, match `x-edge-request-id` to the `x-amz-cf-id` header of its response.
+
+**Look through the account's API calls:** the last 90 days are in the CloudTrail console or `aws cloudtrail lookup-events --region eu-north-1`. Older ones, up to the bucket's 90 days, are the gzipped files under `s3://url-shortener-cloudtrail-<account id>/AWSLogs/`. To check that the files weren't altered:
+
+```bash
+aws cloudtrail validate-logs --trail-arn "$(aws cloudtrail get-trail --name url-shortener-trail --region eu-north-1 --query Trail.TrailARN --output text)" --start-time "$(date -u -d '-1 day' +%FT%TZ)" --region eu-north-1
+```
 
 **Take down a link:** delete it from the table, then clear CloudFront's copy:
 
@@ -185,7 +197,8 @@ It lists the state bucket while the bootstrap exists, and can list deleted resou
 On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026.
 
 - **Practice:** about $0. Lambda and DynamoDB charge per request and have no idle cost, the function URL is free, and CloudFront's free tier covers 10 million requests and 1 TB a month. The web bucket and the invalidations on each release (the first 1,000 paths a month are free) cost about $0. CodeBuild's free tier covers 100 build minutes a month on the small instance, and a deploy takes a few minutes, longer when CloudFront changes. Access logs cost well under a cent a month at this traffic. AWS WAF is off; turned on (`rate_limiting = true`), it costs about $7 a month ($5 for the web ACL, $1 for each of its 2 rules, plus $0.60 per million requests).
-- **Alarms**, at any scale: about $0. They use 9 alarm metrics, and the first 10 are free (otherwise $0.10 per metric a month, $0.90); the first 1,000 alarm emails a month are free.
+- **Alarms**, at any scale: about $0. They use 10 alarm metrics, and the first 10 are free (otherwise $0.10 per metric a month, $1); the first 1,000 alarm emails a month are free.
+- **CloudTrail**, at any scale: about $0. The first copy of management events is free, and the events of a project this size are a few MB a month, so S3 and CloudWatch Logs charges are cents.
 - **Full scale, behind CloudFront** (pay-as-you-go, `full-scale.tfvars.example`), using the prices of [CloudFront](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) and [AWS WAF](https://aws.amazon.com/waf/pricing/) (November 2026).
   - **CloudFront requests:** about $36,500/month for about 30 billion HTTPS requests in Europe ($0.012 per 10,000), plus about $2,500 of data transfer.
   - **AWS WAF:** about $18,000/month: $5 for the web ACL, $1 for each of 2 rules, and $0.60 per million requests inspected. Every request counts, cached or not.
