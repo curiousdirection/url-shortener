@@ -1,4 +1,4 @@
-# 12. Scan the Terraform with Checkov, and skip checks inline
+# 14. Scan the Terraform with Checkov, and skip checks inline
 
 Date: 2026-11-20. Status: accepted.
 
