@@ -97,6 +97,8 @@ jobs:
   # This cancels the run if the deploy job is still queued after 15 minutes.
   watchdog:
     needs: build
+    # Without a status check, a job is skipped when any earlier job in the chain was, as test and terraform are on a rollback.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -120,6 +122,8 @@ jobs:
   # The function first, then the web page, so a new bucket or CDN setting is in place before the page goes up.
   deploy:
     needs: build
+    # Same status check as the watchdog's, for the same reason.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     # The CodeBuild runner project (infra/bootstrap/runner.tf).
     runs-on: codebuild-url-shortener-deploy-${{ github.run_id }}-${{ github.run_attempt }}
     environment: production
