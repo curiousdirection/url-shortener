@@ -15,6 +15,8 @@ CodeBuild can host GitHub Actions runners: it starts a runner in our account for
 - **One deploy job** does the function and then the page, so a deploy uses one runner start.
 - **No IAM users and no access keys.** CodeBuild reaches GitHub through a CodeConnections connection (the AWS GitHub App), which a person approves once.
 - **No plan in CI.** The plan role, its user and the `plan` job are gone; the Terraform check (formatting and validate, no credentials) stays. The deploy's plan is in the run's summary, and you can plan from your machine.
+- **Only the deployer's runs start the runner.** The repository is public, and CodeBuild's webhook can't tell a fork PR's workflow named "Deploy" from ours by name alone. So the webhook also filters on the triggering account's ID (`deployer_github_id`), and GitHub is set to require approval for all external contributors' workflow runs. How they protect the runner: "Access to AWS" in [docs/security.md](../security.md).
+- **A watchdog cancels a deploy that no runner picks up**, because a job waiting for a runner has no timeout and would hold up later deploys.
 - **Tests run once**, on GitHub-hosted runners in CI. Deploy waits for CI as before.
 
 ## Why
@@ -25,7 +27,8 @@ CodeBuild can host GitHub Actions runners: it starts a runner in our account for
 
 ## Consequences
 
-- **CodeBuild can filter runner jobs only by workflow name, not by branch.** A workflow named "Deploy" on any branch could claim the runner and get the deploy role. See "Access to AWS" in [docs/security.md](../security.md).
+- **CodeBuild can filter runner jobs by workflow name and triggering account, not by branch.** A workflow named "Deploy" on any branch that the deployer triggers could claim the runner and get the deploy role.
+- **The account filter is unproven for a deploy that CI starts.** CodeBuild matches the webhook payload's `sender.id`, and for a run started by `workflow_run` we don't know which account GitHub puts there. A wrong ID leaves the job queued until the watchdog cancels it, so the first deploys must be checked ("If the Deploy job never starts" in [infra/README.md](../../infra/README.md)).
 - **`environment: production` is only GitHub's deployment history now**, not a gate.
 - **Free tier:** 100 build minutes a month on the small instance; a deploy takes a few minutes, longer when CloudFront changes.
 - **A one-time approval** of the connection in the console, which Terraform can't do.

@@ -15,15 +15,6 @@ resource "aws_codeconnections_connection" "github" {
   provider_type = "GitHub"
 }
 
-# CodeBuild's account-wide sign-in to GitHub, through the connection.
-# The token is the connection's ARN, not a secret.
-# There is one per account, region and server type, so this replaces any GitHub credential CodeBuild already has here.
-resource "aws_codebuild_source_credential" "github" {
-  auth_type   = "CODECONNECTIONS"
-  server_type = "GITHUB"
-  token       = aws_codeconnections_connection.github.arn
-}
-
 # Kept short, since a build log is a copy of the job's log in GitHub.
 resource "aws_cloudwatch_log_group" "runner" {
   name              = "/aws/codebuild/${local.runner_name}"
@@ -49,9 +40,14 @@ resource "aws_codebuild_project" "runner" {
     image        = "aws/codebuild/amazonlinux-x86_64-standard:5.0"
   }
 
+  # The connection is set on the project, so the account's default GitHub credential in CodeBuild is left alone.
   source {
     type     = "GITHUB"
     location = "https://github.com/${var.github_repo}"
+    auth {
+      type     = "CODECONNECTIONS"
+      resource = aws_codeconnections_connection.github.arn
+    }
   }
 
   logs_config {
@@ -59,12 +55,10 @@ resource "aws_codebuild_project" "runner" {
       group_name = aws_cloudwatch_log_group.runner.name
     }
   }
-
-  depends_on = [aws_codebuild_source_credential.github]
 }
 
-# Starts a runner for each queued job of a workflow named "Deploy".
-# CodeBuild can't filter a runner job by branch, only by workflow name: see "Access to AWS" in docs/security.md.
+# Starts a runner for each queued job of a workflow named "Deploy" that the deployer's GitHub account triggered.
+# CodeBuild can't filter a runner job by branch: see "Access to AWS" in docs/security.md.
 resource "aws_codebuild_webhook" "runner" {
   project_name = aws_codebuild_project.runner.name
   build_type   = "BUILD"
@@ -77,6 +71,14 @@ resource "aws_codebuild_webhook" "runner" {
     filter {
       type    = "WORKFLOW_NAME"
       pattern = "^Deploy$"
+    }
+    # Matches the `id` of the webhook payload's `sender`:
+    # https://docs.aws.amazon.com/codebuild/latest/userguide/github-webhook.html
+    # Anchored, because an unanchored pattern let other accounts through in:
+    # https://aws.amazon.com/security/security-bulletins/2026-002-AWS/
+    filter {
+      type    = "ACTOR_ACCOUNT_ID"
+      pattern = "^${var.deployer_github_id}$"
     }
   }
 }

@@ -5,6 +5,7 @@
 # The build job runs the npm packages on a GitHub-hosted runner, with no AWS credentials.
 # The deploy job runs on a CodeBuild-hosted runner in our AWS account and gets its credentials from the deploy role (infra/bootstrap/runner.tf), so there are no access keys.
 # The workflow must stay named "Deploy": that is what the runner's webhook filters on.
+# If the deploy job never starts, the watchdog job cancels the run.
 name: Deploy
 
 on:
@@ -22,6 +23,13 @@ on:
 # Read-only by default.
 permissions:
   contents: read
+
+# One deploy at a time, in the order they were triggered.
+# A new one waits rather than cancelling a running apply; a newer one replaces one that is still waiting.
+# A run that CI's failure only skips gets a group of its own, so it can't replace a waiting deploy.
+concurrency:
+  group: ${{ (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') && 'deploy-production' || format('deploy-skipped-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -41,7 +49,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }} # the commit CI tested, or the one to roll back to
-          fetch-depth: 0 # to compare with the deployed commit
+          fetch-depth: 0 # check-on-main.sh needs main's history for a rollback
 
       # A rollback may only deploy code that was merged, not a commit from another branch.
       - name: Check the rollback commit is on main
@@ -70,24 +78,41 @@ jobs:
           path: build/web
           if-no-files-found: error
 
+  # timeout-minutes doesn't apply while a job waits for a runner, and GitHub gives up on it only after 24 hours.
+  # So a deploy that CodeBuild never picks up (a lost webhook, a revoked connection, a filter that doesn't match) would hold the concurrency group and block every later deploy.
+  # This cancels the run if the deploy job is still queued after 15 minutes.
+  watchdog:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write # to cancel the run; only this job has it
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Cancel the run if no runner picks up the deploy job
+        run: |
+          for _ in $(seq 30); do
+            status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --jq '.jobs[] | select(.name == "deploy") | .status')"
+            [ "$status" = queued ] || exit 0
+            sleep 30
+          done
+          echo "::error::No CodeBuild runner picked up the deploy job in 15 minutes. See \"If the Deploy job never starts\" in infra/README.md."
+          echo "### Deploy cancelled: no runner started within 15 minutes" >> "$GITHUB_STEP_SUMMARY"
+          gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+          sleep 60 # the cancellation ends this job too
+
   # The function first, then the web page, so a new bucket or CDN setting is in place before the page goes up.
   deploy:
     needs: build
-    # One deploy at a time.
-    # A new one waits rather than cancelling a running apply; a newer one replaces one that is still waiting.
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
     # The CodeBuild runner project (infra/bootstrap/runner.tf).
     runs-on: codebuild-url-shortener-deploy-${{ github.run_id }}-${{ github.run_attempt }}
-    # For GitHub's deployment history only; the deploy role's trust policy and the workflow name are what limit who can deploy (docs/security.md).
     environment: production
     permissions:
       contents: read
     timeout-minutes: 45
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
-      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }} # the AWS CLI reads this one
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
       ROLLBACK_TO: ${{ inputs.ref }}

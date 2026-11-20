@@ -15,3 +15,13 @@ variable "github_repo" {
   type        = string
   default     = "curiousdirection/url-shortener"
 }
+
+variable "deployer_github_id" {
+  description = "The numeric GitHub account ID of the person whose Deploy runs may start the runner (`gh api users/<login> --jq .id`). No default: set it in terraform.tfvars."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.deployer_github_id))
+    error_message = "Use the numeric ID, not the login."
+  }
+}

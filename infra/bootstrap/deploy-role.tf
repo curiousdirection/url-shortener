@@ -1,5 +1,5 @@
 # The deploy role, used by .github/workflows/deploy.yml to apply infra/app.
-# Only the CodeBuild runner project (runner.tf) can assume it, and its deploy job gets the credentials from the project's service role.
+# Only the CodeBuild runner project (infra/bootstrap/runner.tf) can assume it, and its deploy job gets the credentials from the project's service role.
 
 resource "aws_iam_role" "deploy" {
   name                 = "github-deploy-${var.name}"
@@ -28,7 +28,7 @@ locals {
   # The function's role, made in infra/foundation/iam.tf with this exact name.
   lambda_role_arn = "arn:aws:iam::${local.account_id}:role/${var.name}-lambda"
 
-  # The runner project's build logs, in the log group that runner.tf makes with this exact name.
+  # The runner project's build logs, in the log group that infra/bootstrap/runner.tf makes with this exact name.
   runner_log_group_arn = "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/codebuild/${local.runner_name}"
 }
 

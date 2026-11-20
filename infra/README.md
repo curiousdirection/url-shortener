@@ -33,7 +33,7 @@ All three states are in the S3 bucket.
 
 Do these once, in order, on a commit that is on `main`.
 
-1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. Create the GitHub connection first and approve it, because the runner's webhook can't be made through a pending connection.
+1. **Apply the bootstrap.** Its state bucket doesn't exist yet, so this first apply keeps the state locally, through a gitignored override file. Only runs that your GitHub account triggers may start the runner, so put its numeric ID in `infra/bootstrap/terraform.tfvars` first (`deployer_github_id = "..."`; there is no default; get the ID with `gh api users/<your login> --jq .id`). Create the GitHub connection first and approve it, because the runner's webhook can't be made through a pending connection.
 
    ```bash
    printf 'terraform {\n  backend "local" {}\n}\n' > infra/bootstrap/backend_override.tf
@@ -58,7 +58,7 @@ Do these once, in order, on a commit that is on `main`.
    terraform -chdir=infra/app init -backend-config=../backend.hcl
    ```
 
-3. **Set up GitHub.** Under Settings > Environments, create `production` and limit its deployment branches to `main`. It only feeds GitHub's deployment history. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
+3. **Set up GitHub.** Under Settings > Actions > General, set "Fork pull request workflows from outside collaborators" to "Require approval for all external contributors" (the default only asks first-time contributors). Under Settings > Environments, create `production` and limit its deployment branches to `main`. Then add these variables (none are secret) under Settings > Secrets and variables > Actions:
 
 ```bash
 gh variable set AWS_REGION --body eu-north-1
@@ -81,9 +81,9 @@ gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=infra/bootstrap outpu
 
    `release.sh` also uploads the web page.
 
-6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that the runner can sign in.
+6. **Run the Deploy workflow once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check that the runner starts and can sign in. The first deploy after a merge to `main` is a different path (the CI run starts it), so check that one too: see "If the Deploy job never starts".
 
-If the role is refused a `lambda:`, `logs:` or `s3:` action, add it in `bootstrap/deploy-role.tf` and apply the bootstrap again: the permission list hasn't been run against a real account yet.
+If the role is refused a `lambda:`, `logs:` or `s3:` action, add it in `infra/bootstrap/deploy-role.tf` and apply the bootstrap again: the permission list hasn't been run against a real account yet.
 
 ## Change the bootstrap
 
@@ -101,6 +101,8 @@ The GitHub settings stay as they are.
 **App changes:** merge to `main`. Once CI passes, the Deploy workflow ships it: a `build` job on GitHub's runners makes the zip and the page, then a `deploy` job on the CodeBuild runner applies and uploads them. Its logs are also in the `/aws/codebuild/url-shortener-deploy` log group. If the `deploy` job never starts, check the webhook of the `url-shortener-deploy` CodeBuild project and that the connection is still approved. Or from your machine: commit, then run `infra/scripts/release.sh`. It builds the zip with `infra/scripts/build-zip.sh` and applies `infra/app`.
 
 **Web page changes** (`web/`): merge to `main`. After the app deploy, the Deploy workflow uploads the page it built with `infra/scripts/release-web.sh`, clears CloudFront's copy of `index.html` and checks that `/` serves the new release. It skips when nothing in `web/` (or its build) changed. From your machine, `release.sh` does the same after its apply. The caching is in [ADR 0009](../docs/decisions/0009-frontend-on-s3.md).
+
+**If the Deploy job never starts:** it waits for a CodeBuild runner, and the `watchdog` job cancels the run after 15 minutes (cancel one by hand with `gh run cancel <run id>`). A runner starts only for a workflow named `Deploy` triggered by the account in `deployer_github_id`. Check the runner project's webhook in the CodeBuild console, that the connection is still approved, and the webhook's recent deliveries (the repository's Settings > Webhooks, the `workflow_job` event). In the payload, `sender.id` must equal `deployer_github_id`; GitHub may set it to another account for a run that CI started rather than a person, in which case change `deployer_github_id` or the filter in `infra/bootstrap/runner.tf` and apply the bootstrap.
 
 A change to CloudFront takes a few minutes to reach every location; the Deploy workflow's `/health` check runs after that.
 
@@ -133,9 +135,9 @@ terraform -chdir=infra/foundation apply
 
 ## Move an existing setup off access keys
 
-For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out, and do 2 to 4 together: from 2 until the merge, Deploy can't sign in.
+For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-runner.md), which has the two IAM users and their keys. In this order, with admin credentials and this change checked out. From step 2 until the merge, Deploy can't sign in, so go straight through.
 
-1. **Create and approve the connection**, as in step 1 of "Set up and first run": `terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github`, then approve it in the console.
+1. **Set `deployer_github_id` and create the connection**, as in step 1 of "Set up and first run": put the ID in `infra/bootstrap/terraform.tfvars`, run `terraform -chdir=infra/bootstrap apply -target=aws_codeconnections_connection.github`, then approve it in the console. Also set "Require approval for all external contributors" (step 3 there).
 2. **Delete the two users' access keys.** Terraform can't delete a user that has one, so this must come before the apply that removes the users (names are for the default `name`).
 
    ```bash
@@ -153,7 +155,7 @@ For a setup made before [ADR 0011](../docs/decisions/0011-deploy-on-a-codebuild-
    ```
 
 4. **Merge** the change to `main`. The old `deploy.yml` can't sign in any more, so the merge is what brings deploys back.
-5. **Run Deploy once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) to check the runner.
+5. **Run Deploy once by hand** (Actions > Deploy > Run workflow, on `main`, `ref` empty) and check that a runner starts. Then check the deploy that CI starts after the next merge to `main` does too. Both are described in "If the Deploy job never starts".
 6. **Delete the old GitHub settings.**
 
    ```bash

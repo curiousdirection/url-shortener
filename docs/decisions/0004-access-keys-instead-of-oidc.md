@@ -18,7 +18,7 @@ Keep the two roles and their permissions. Each is trusted only by its own IAM us
 
 ## Consequences
 
-- **The keys don't expire.** Rotate them by hand ("Rotate the CI access keys" in [infra/README.md](../../infra/README.md)).
+- **The keys don't expire.** Rotate them by hand (the rotation steps were removed from [infra/README.md](../../infra/README.md) with [0011](0011-deploy-on-a-codebuild-runner.md), which removes the keys).
 - **Any branch's CI can use the plan keys.**
 - **The deploy role no longer checks the branch itself.** The environment rule is the only gate.
 

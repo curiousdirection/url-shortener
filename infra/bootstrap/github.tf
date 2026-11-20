@@ -1,5 +1,5 @@
-# What the deploy role and its policy are built from, shared with deploy-role.tf.
-# How GitHub Actions gets the role's credentials is in runner.tf; why: docs/decisions/0011-deploy-on-a-codebuild-runner.md.
+# What the deploy role and its policy are built from, shared with infra/bootstrap/deploy-role.tf.
+# How GitHub Actions gets the role's credentials is in infra/bootstrap/runner.tf; why: docs/decisions/0011-deploy-on-a-codebuild-runner.md.
 
 locals {
   account_id       = data.aws_caller_identity.current.account_id
