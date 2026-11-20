@@ -34,9 +34,13 @@ jobs:
     if: inputs.ref == ''
     uses: ./.github/workflows/terraform.yml
 
+  lint:
+    if: inputs.ref == ''
+    uses: ./.github/workflows/lint.yml
+
   build:
-    needs: [test, terraform]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (inputs.ref != '' || (needs.test.result == 'success' && needs.terraform.result == 'success')) }}
+    needs: [test, terraform, lint]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (inputs.ref != '' || (needs.test.result == 'success' && needs.terraform.result == 'success' && needs.lint.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -48,6 +52,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       # A rollback may only deploy code that was merged, not a commit from another branch.
       - name: Check the rollback commit is on main
@@ -115,6 +120,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check the runner has its tools
         run: |
