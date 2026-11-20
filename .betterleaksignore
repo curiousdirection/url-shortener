@@ -1,0 +1,16 @@
+# Dummy postgres:postgres passwords in old commits, from the old ECS and RDS stack.
+3a161e398b0ed9d76f3bc16bab08ff8f21bca66f:.github/workflows/test.yml:generic-password:28
+59ee97169f4f3453c32bf32dc40036daed4fa70a:.env.example:generic-credential-uri:3
+59ee97169f4f3453c32bf32dc40036daed4fa70a:.env.test:generic-credential-uri:2
+59ee97169f4f3453c32bf32dc40036daed4fa70a:docker-compose.yml:generic-password:13
+59ee97169f4f3453c32bf32dc40036daed4fa70a:docker-compose.yml:generic-password:6
+59ee97169f4f3453c32bf32dc40036daed4fa70a:src/config.ts:generic-credential-uri:5
+69377a618d1697cd5240ba0f5150f524adac9298:.github/workflows/ci.yml:generic-password:35
+69377a618d1697cd5240ba0f5150f524adac9298:.github/workflows/deploy.yml:generic-password:61
+6b615b9b5a639584c7923bb091eaa741061798d3:.env.test:generic-credential-uri:2
+6b615b9b5a639584c7923bb091eaa741061798d3:docker-compose.yml:generic-password:13
+81cc4b0dd9e71fc5303a61686d35734cac620b8e:.github/workflows/test.yml:generic-password:30
+b1514a6c421b928e6a17b741c78ee898c2781d5d:.env.example:generic-credential-uri:3
+b1514a6c421b928e6a17b741c78ee898c2781d5d:docker-compose.yml:generic-password:6
+b1514a6c421b928e6a17b741c78ee898c2781d5d:src/config.ts:generic-credential-uri:5
+ba7aaf820a5b6ccfaa5271cec6a3423dd2014d70:.env.test:generic-credential-uri:2

@@ -157,6 +157,10 @@ A deploy switches all traffic to the new code at once. If the new code is broken
 
 A rollback changes the code, not the links in the table. So a change to how links are stored must still work with the previous code.
 
+## If the secret scan fails
+
+The `Secrets` workflow runs betterleaks over the whole history. If it fails, revoke the key first, then remove it from the history. For a false positive, add a line `<commit>:<file>:<rule>:<line>` for it to `.betterleaksignore` at the repo root.
+
 ## Tear down
 
 App first, then the foundation (the function uses the foundation's role):
