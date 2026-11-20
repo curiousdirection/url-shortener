@@ -137,6 +137,8 @@ Without the `cut` and `jq`, it prints every line with all its fields; add `--fol
 aws cloudfront create-invalidation --distribution-id "$(terraform -chdir=infra/app output -raw distribution_id)" --paths "/<code>"
 ```
 
+**Security scan:** CI runs `infra/scripts/scan-terraform.sh` on every push, and you can run it before pushing. To skip a check you don't follow, add `#checkov:skip=<id>: <reason>` inside the resource.
+
 **Infrastructure changes** (`bootstrap/` or `foundation/`): CI never applies these. Plan and apply them yourself, before merging anything that needs them:
 
 ```bash

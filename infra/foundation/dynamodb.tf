@@ -3,6 +3,8 @@
 # Why DynamoDB: docs/decisions/0006-move-to-lambda-and-dynamodb.md
 
 resource "aws_dynamodb_table" "urls" {
+  #checkov:skip=CKV_AWS_119: The AWS-owned key is free and the links are public data, so there is no customer-managed key to pay for and rotate.
+  #checkov:skip=CKV_AWS_28: Off for practice and on at full scale through table_point_in_time_recovery.
   name = "${var.name}-urls"
 
   # On-demand: pay per request, nothing to size, and it follows spikes.

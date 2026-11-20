@@ -51,6 +51,12 @@ resource "aws_cloudfront_function" "forwarded_host" {
 }
 
 resource "aws_cloudfront_distribution" "app" {
+  #checkov:skip=CKV_AWS_174: The default CloudFront certificate can't set a minimum TLS version; a custom domain could.
+  #checkov:skip=CKV2_AWS_42: There is no custom domain yet.
+  #checkov:skip=CKV_AWS_86: Logging is the cdn_access_logs variable, which uses log delivery v2 that this check can't see.
+  #checkov:skip=CKV_AWS_374: The shortener is meant to be reachable from anywhere.
+  #checkov:skip=CKV_AWS_310: The app and the page each have one origin, so there is nothing to fail over to.
+  #checkov:skip=CKV2_AWS_47: The WAF is only on at full scale, and the app has no Java, so Log4j does not apply.
   comment         = var.name
   enabled         = true
   is_ipv6_enabled = true

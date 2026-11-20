@@ -3,6 +3,7 @@
 
 # A web ACL for CloudFront must be in us-east-1.
 resource "aws_wafv2_web_acl" "app" {
+  #checkov:skip=CKV2_AWS_31: Logs would hold visitor IPs, which docs/security.md says we don't keep.
   count       = var.rate_limiting ? 1 : 0
   provider    = aws.us_east_1
   name        = var.name

@@ -23,11 +23,18 @@ locals {
 }
 
 resource "aws_cloudwatch_log_group" "app" {
+  #checkov:skip=CKV_AWS_158: The log holds no secrets, and the AWS-owned key costs nothing.
+  #checkov:skip=CKV_AWS_338: Deleted after 7 days on purpose, so no visitor data lingers.
   name              = "/${var.name}/app"
   retention_in_days = 7
 }
 
 resource "aws_lambda_function" "app" {
+  #checkov:skip=CKV_AWS_116: Called synchronously through the function URL, so a dead letter queue never receives anything.
+  #checkov:skip=CKV_AWS_117: No VPC on purpose: the function only calls DynamoDB, and a VPC would add cost and cold starts.
+  #checkov:skip=CKV_AWS_272: CI builds and deploys the zip from reviewed code, and code signing needs a signing profile to manage.
+  #checkov:skip=CKV_AWS_173: The only setting is the table name, which is not secret.
+  #checkov:skip=CKV_AWS_50: X-Ray is off for practice, as the app has one function and one table.
   function_name = var.name
   description   = "Release ${var.app_version}"
   role          = local.foundation.lambda_role_arn

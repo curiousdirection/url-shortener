@@ -8,6 +8,8 @@
 data "aws_caller_identity" "current" {}
 
 resource "aws_cloudwatch_log_group" "access" {
+  #checkov:skip=CKV_AWS_158: The log holds no secrets, and the AWS-owned key costs nothing.
+  #checkov:skip=CKV_AWS_338: Deleted after 7 days on purpose (docs/security.md).
   count    = var.cdn_access_logs ? 1 : 0
   provider = aws.us_east_1
   # Letters, digits, - and _ only: the log delivery refuses other characters, so no slashes as in /url-shortener/app.
