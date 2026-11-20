@@ -1,0 +1,43 @@
+# Weekly version updates for npm, the Actions pins and the three Terraform stacks.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # A new release waits 5 days, so a hijacked one is more likely to be pulled first.
+    cooldown:
+      default-days: 5
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  # Keeps the commit SHA and rewrites the "# vX.Y.Z" comment next to it.
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directories:
+      - /infra/bootstrap
+      - /infra/foundation
+      - /infra/app
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 5
+    groups:
+      terraform-minor-patch:
+        update-types: [minor, patch]
