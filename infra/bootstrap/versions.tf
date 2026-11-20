@@ -1,15 +1,13 @@
 # The bootstrap stack: what has to exist before the other two stacks and CI can work.
-# The S3 bucket for Terraform state, and the CodeBuild runner that the deploy job runs on, with the IAM role it signs in as.
+# It holds the Terraform state bucket and the deploy runner with its role.
 # You apply this once, by hand, with admin credentials.
 # CI never touches it.
-# See docs/decisions/0003-split-stacks-remote-state-and-ci-deploys.md, docs/decisions/0011-deploy-on-a-codebuild-runner.md and "Set up and first run" in infra/README.md.
 
 terraform {
   required_version = ">= 1.11"
 
   # State in the bucket this stack creates.
   # The bucket doesn't exist on the very first apply, so that one runs with a local backend_override.tf (gitignored) and the state is moved here afterwards (see "Set up and first run" in infra/README.md).
-  # The deploy role is denied this key.
   backend "s3" {
     key          = "bootstrap/terraform.tfstate"
     use_lockfile = true

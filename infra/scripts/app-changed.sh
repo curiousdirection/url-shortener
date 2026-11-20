@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Prints "true" if the commits between <from> and <to> change anything that goes into the zip or the app stack ("app"), or into the web page ("web"), "false" if not (docs or tests alone).
-# CI's deploy job compares the deployed commit with the new one and deploys on "true".
 # Usage: infra/scripts/app-changed.sh app|web <from commit> <to commit>
 set -euo pipefail
 

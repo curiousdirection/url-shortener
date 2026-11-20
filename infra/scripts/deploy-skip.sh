@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Decides whether CI's deploy job can skip the function ("app") or the web page ("web"), changing nothing.
-# If so, it sets SKIP_APP or SKIP_WEB (torn-down or unchanged) in $GITHUB_ENV and says why in $GITHUB_STEP_SUMMARY; the steps for that part run only while it is unset.
+# Decides whether the deploy can skip the function ("app") or the web page ("web"), and if so sets SKIP_APP or SKIP_WEB.
 # CI never recreates a torn-down stack; release.sh does.
 # A rollback (ROLLBACK_TO set) never skips because nothing changed.
 # Usage: infra/scripts/deploy-skip.sh app|web   (needs AWS credentials, `terraform init` in infra/app and GitHub's $GITHUB_ENV and $GITHUB_STEP_SUMMARY)

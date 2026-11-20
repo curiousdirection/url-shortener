@@ -26,7 +26,6 @@ resource "aws_s3_bucket_versioning" "state" {
 }
 
 # Encrypt at rest with the S3-managed key (SSE-S3).
-# Keep it: a KMS key would need its own grant for the deploy role.
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {

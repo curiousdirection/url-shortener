@@ -1,13 +1,4 @@
-# Checks every push to every branch: tests and build (test.yml), Terraform checks (terraform.yml).
-# On main, the checks are followed by the deploy: build the zip and the page, apply infra/app, check /health.
-# Then, if the page changed, it uploads it.
-# Run it by hand with ref to roll back.
-#
-# The build job runs the npm packages on a GitHub-hosted runner, with no AWS credentials.
-# The deploy job runs on a CodeBuild-hosted runner in our AWS account and gets its credentials from the deploy role (infra/bootstrap/runner.tf), so there are no access keys.
-# The workflow must stay named "CI": that is what the runner's webhook filters on.
-# If the deploy job never starts, the watchdog job cancels the run.
-#
+# Tests every push, and deploys main once the tests pass.
 # All workflows pin actions to commit SHAs.
 # To update one, change the SHA and the version comment together:
 #   git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>*'
@@ -25,10 +16,6 @@ on:
 permissions:
   contents: read
 
-# One run per ref.
-# A new push to a branch cancels the run in progress.
-# On main, runs queue instead, so an apply is never cancelled and deploys go in the order they were triggered; a newer waiting run replaces an older one that is still waiting.
-# A rollback started on main joins the same queue.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -42,14 +29,10 @@ jobs:
     if: inputs.ref == ''
     uses: ./.github/workflows/test.yml
 
-  # Terraform formatting and validate (terraform.yml).
   terraform:
     if: inputs.ref == ''
     uses: ./.github/workflows/terraform.yml
 
-  # The three jobs below run only on main, after the checks passed.
-  # A rollback skips the checks, so a broken main can't block it: that commit was tested when it was merged.
-  # `watchdog` and `deploy` need `build`, so they are skipped with it.
   build:
     needs: [test, terraform]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (inputs.ref != '' || (needs.test.result == 'success' && needs.terraform.result == 'success')) }}
@@ -62,15 +45,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.sha }} # the commit pushed, or the one to roll back to
-          fetch-depth: 0 # check-on-main.sh needs main's history for a rollback
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
 
       # A rollback may only deploy code that was merged, not a commit from another branch.
       - name: Check the rollback commit is on main
         if: inputs.ref != ''
         run: infra/scripts/check-on-main.sh
 
-      # Everything npm runs is here, so it never runs where AWS credentials are available.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
@@ -92,17 +74,13 @@ jobs:
           path: build/web
           if-no-files-found: error
 
-  # timeout-minutes doesn't apply while a job waits for a runner, and GitHub gives up on it only after 24 hours.
-  # So a deploy that CodeBuild never picks up (a lost webhook, a revoked connection, a filter that doesn't match) would hold the concurrency group and block every later deploy.
-  # This cancels the run if the deploy job is still queued after 15 minutes.
   watchdog:
     needs: build
-    # Without a status check, a job is skipped when any earlier job in the chain was, as test and terraform are on a rollback.
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      actions: write # to cancel the run; only this job has it
+      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -110,21 +88,17 @@ jobs:
         run: |
           for _ in $(seq 30); do
             status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --jq '.jobs[] | select(.name == "deploy") | .status')"
-            # Empty or pending means the job isn't created or ready yet, so keep watching.
             case "$status" in in_progress | completed) exit 0 ;; esac
             sleep 30
           done
           echo "::error::No CodeBuild runner picked up the deploy job in 15 minutes. See \"If the deploy job never starts\" in infra/README.md."
           echo "### Deploy cancelled: no runner started within 15 minutes" >> "$GITHUB_STEP_SUMMARY"
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
-          sleep 60 # the cancellation ends this job too
+          sleep 60
 
-  # The function first, then the web page, so a new bucket or CDN setting is in place before the page goes up.
   deploy:
     needs: build
-    # Same status check as the watchdog's, for the same reason.
     if: ${{ !cancelled() && needs.build.result == 'success' }}
-    # The CodeBuild runner project (infra/bootstrap/runner.tf).
     runs-on: codebuild-url-shortener-deploy-${{ github.run_id }}-${{ github.run_attempt }}
     environment: production
     permissions:
@@ -139,9 +113,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
-          fetch-depth: 0 # deploy-skip.sh compares with the deployed commit
+          fetch-depth: 0
 
-      # The scripts and Terraform's setup need these, and the CodeBuild image is not the GitHub-hosted one.
       - name: Check the runner has its tools
         run: |
           for tool in aws curl git unzip; do
