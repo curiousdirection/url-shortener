@@ -4,19 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "dotenv -o -e .env -- tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
     "bundle": "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --minify --outfile=build/lambda/index.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
-    "db:setup": "dotenv -o -e .env -- tsx src/setupDb.ts",
     "db:setup:test": "dotenv -o -e .env.test -- tsx src/setupDb.ts",
-    "web:dev": "vite",
     "web:build": "tsc -p web && vite build",
     "test": "vitest run"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1171.0",
-    "@hono/node-server": "^2.1.7",
     "@hono/zod-validator": "^0.9.1",
     "hono": "^4.13.18",
     "zod": "^4.6.7"
