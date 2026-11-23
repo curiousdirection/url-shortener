@@ -193,3 +193,12 @@ On-demand `eu-north-1` (Stockholm) prices from the AWS Price List, November 2026
   - **Access logs** are off. On, they would cost about $5,000/month: about 10 TB of log lines (a guess of 330 bytes each) at $0.50 per GB, the first tier of [CloudWatch's vended logs](https://aws.amazon.com/cloudwatch/pricing/).
   - **Origin (Lambda, DynamoDB):** about $1.2k/month, assuming 90% of redirects come from the cache (a guess; [ADR 0007](../docs/decisions/0007-cdn-cloudfront.md)).
 - **Full scale, without a CDN**, for comparison: about $12,000/month, about twice the old ECS and RDS stack (about $6,200): Lambda requests ~$6,100 (about 30 billion a month), data transfer out ~$2,650, DynamoDB ~$2,300, Lambda run time ~$800.
+
+## Future
+
+- Add a metric for short code clashes
+- gradual lambda rollout (an alias that shifts traffic in steps and switches back by itself if an alarm fires)
+- Count misses. Emit a “not found” metric (same method as section 2) and alarm when misses spike, so you notice a guessing run.
+- open points in security.md
+- auth (avoids abuse)
+- optional expiration
