@@ -14,11 +14,4 @@ export default defineConfig({
   root: "web",
   build: { outDir: "../build/web", emptyOutDir: true, assetsDir: "assets" },
   plugins: [{ name: "release-meta", transformIndexHtml: (html) => html.replace("%RELEASE%", release()) }],
-  server: {
-    // The local server (npm run dev) answers these, so short links redirect from the dev page too.
-    // Vite's own paths contain ".", "@" or "/", so the last pattern doesn't catch them.
-    proxy: Object.fromEntries(
-      ["/api", "/health", "^/[A-Za-z0-9_-]+$"].map((path) => [path, "http://localhost:3000"]),
-    ),
-  },
 });

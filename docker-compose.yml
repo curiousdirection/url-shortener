@@ -1,17 +1,6 @@
 services:
-  dynamodb:
-    image: amazon/dynamodb-local:3.3.2
-    # -sharedDb: one database file whatever the keys and region, so any dummy credentials work.
-    command: -jar DynamoDBLocal.jar -sharedDb -dbPath /data -disableTelemetry
-    # The image runs as a user that can't write to a new volume.
-    user: root
-    ports: ["8000:8000"]
-    volumes: ["dynamodb-data:/data"]
   dynamodb-test:
     image: amazon/dynamodb-local:3.3.2
     # In memory, so it is wiped on restart.
     command: -jar DynamoDBLocal.jar -sharedDb -inMemory -disableTelemetry
     ports: ["8001:8000"]
-
-volumes:
-  dynamodb-data:
