@@ -58,4 +58,5 @@ What protects the app and its deployment today, and what isn't covered yet. Upda
 | Automated updates | Stale npm packages and action SHAs | Dependabot, Renovate |
 | Locked action dependencies | An action we pin calling other actions that aren't pinned, so what runs can change under us | GitHub Actions workflow lock files (`.github/workflows/actions.lock`) |
 | Abuse of the shortener | Anyone can create links (no auth; only the per-IP rate limit, and a public form makes it easier), so it can hide phishing or malware links | AWS WAF bot rules, a URL blocklist |
+| Denial of service at full scale | A flood from many addresses: no alarm until the function cap is hit, and nothing caps CloudFront and AWS WAF charges ([ddos.md](ddos.md)) | Alarms in us-east-1, a CloudFront flat-rate plan, AWS Shield Advanced |
 | Account monitoring | Suspicious API calls or access | CloudTrail, AWS Config (the Free plan's SCP blocks GuardDuty and Security Hub) |
