@@ -38,16 +38,18 @@ export function createUrlService(
     }
   };
 
-  const get = async (code: string, consistent: boolean) => {
+  const read = async (code: string, consistentRead: boolean) => {
     const { Item } = await db.send(
       new GetItemCommand({
         TableName: tableName,
         Key: { code: { S: code } },
-        ConsistentRead: consistent,
+        ConsistentRead: consistentRead,
       }),
     );
     return Item?.long_url?.S ?? null;
   };
+  const readEventual = (code: string) => read(code, false);
+  const readConsistent = (code: string) => read(code, true);
 
   return {
     async create(longUrl, alias) {
@@ -63,10 +65,10 @@ export function createUrlService(
       throw new Error("could not allocate a unique code");
     },
 
-    // The default read is cheaper but can miss an item written a moment ago.
+    // An eventually consistent read is cheaper but can miss an item written a moment ago.
     // Ask again with a consistent read, so a link that was just created never answers 404.
     async resolve(code) {
-      return (await get(code, false)) ?? (await get(code, true));
+      return (await readEventual(code)) ?? (await readConsistent(code));
     },
   };
 }
